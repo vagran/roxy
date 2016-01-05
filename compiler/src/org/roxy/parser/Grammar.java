@@ -95,7 +95,7 @@ public abstract class Node {
     }
 
     protected void
-    Compile(int pass, HashSet<Node> visitedNodes, HashMap<NodeRef, Node> nodeRefs)
+    Compile(HashSet<Node> visitedNodes)
     {
         visitedNodes.add(this);
     }
@@ -177,25 +177,11 @@ public class NodeRef extends Node {
         throw new IllegalStateException("Unresolved node reference: " + refName);
     }
 
-    protected void
-    Compile(int pass, HashSet<Node> visitedNodes, HashMap<NodeRef, Node> nodeRefs)
+    @Override protected void
+    Compile(HashSet<Node> visitedNodes)
     {
         visitedNodes.add(this);
-        if (pass == 0) {
-            Node replacement;
-            if (name != null) {
-                replacement = new SequenceNode(new Node[]{null});
-            } else {
-                replacement = null;
-                Node target = Resolve();
-                if (!visitedNodes.contains(target)) {
-                    target.Compile(0, visitedNodes, nodeRefs);
-                }
-            }
-            nodeRefs.put(this, replacement);
-        } else {
-            throw new InternalError("Should not reach NodeRef in the second pass");
-        }
+        ref = Resolve();
     }
 
     @Override protected String
@@ -211,6 +197,7 @@ public class NodeRef extends Node {
     }
 
     private final String refName;
+    private Node ref;
 }
 
 public class CharNode extends Node {
@@ -318,17 +305,11 @@ public class GroupNode extends Node {
     }
 
     @Override protected void
-    Compile(int pass, HashSet<Node> visitedNodes, HashMap<NodeRef, Node> nodeRefs)
+    Compile(HashSet<Node> visitedNodes)
     {
-        visitedNodes.add(this);
-        for (int i = 0; i < nodes.length; i++) {
-            Node node = nodes[i];
+        for (Node node: nodes) {
             if (!visitedNodes.contains(node)) {
-                if (pass == 1 && node instanceof NodeRef) {
-                    node = nodeRefs.get(node);
-                    nodes[i] = node;
-                }
-                node.Compile(pass, visitedNodes, nodeRefs);
+                node.Compile(visitedNodes);
             }
         }
     }
@@ -458,43 +439,8 @@ public void
 Compile()
 {
     HashSet<Node> visitedNodes = new HashSet<>();
-    /* Resolved NodeRef nodes. NodeRef is transformed to either SequenceNode with one element (if
-     * this NodeRef is named) or to resolved referenced node.
-     */
-    HashMap<NodeRef, Node> nodeRefs = new HashMap<>();
-
     for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
-        kv.getValue().Compile(0, visitedNodes, nodeRefs);
-    }
-
-    /* nodeRefs now contains all NodeRef instances with either null for not yet resolved targets or
-     * SequenceNode for created replacements. Resolve unresolved targets now.
-     */
-    for (Map.Entry<NodeRef, Node> kv: nodeRefs.entrySet()) {
-        Node node = kv.getValue();
-        Node target = nodesIndex.get(kv.getKey().refName);
-        if (target instanceof NodeRef) {
-            /* Named node always should have replacement available from the previous stage. */
-            target = nodeRefs.get(target);
-            assert target != null;
-        }
-        if (node == null) {
-            kv.setValue(target);
-        } else {
-            /* Fill sequence first (and only) member. */
-            ((SequenceNode)node).nodes[0] = target;
-        }
-    }
-
-    /* Now replace all NodeRef with their targets. */
-    visitedNodes.clear();
-    for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
-        Node node = kv.getValue();
-        if (node instanceof NodeRef) {
-            node = nodeRefs.get(node);
-            kv.setValue(node);
-        }
-        node.Compile(1, visitedNodes, nodeRefs);
+        kv.getValue().Compile(visitedNodes);
     }
 }
 
