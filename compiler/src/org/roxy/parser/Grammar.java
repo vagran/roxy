@@ -1,6 +1,7 @@
 package org.roxy.parser;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -75,32 +76,28 @@ public class Node {
     protected String name;
     protected int numMin, numMax;
     protected boolean quantityValid = false;
-    /** Node is cloned into compiled tree. */
-    protected boolean isCloned = false;
 
     protected Node
-    CopyTo(Map<String, Node> localIndex, Node node)
+    CopyTo(Node node)
     {
-        assert !isCloned;
         node.name = name;
         node.quantityValid = quantityValid;
         node.numMin = numMin;
         node.numMax = numMax;
-        node.isCloned = true;
-        if (name != null) {
-            assert !localIndex.containsKey(name);
-            localIndex.put(name, node);
-        }
         return node;
     }
 
     protected Node
-    Clone(Map<String, Node> localIndex)
+    Resolve(HashSet<Node> visitedNodes, TreeMap<String, Node> nodeRefs)
     {
-        if (isCloned) {
-            return this;
-        }
-        return CopyTo(localIndex, new Node());
+        visitedNodes.add(this);
+        return this;
+    }
+
+    protected Node
+    Compile()
+    {
+        return this;
     }
 }
 
@@ -144,25 +141,37 @@ public class NodeRef extends Node {
     }
 
     private Node
-    Resolve(Map<String, Node> localIndex)
+    Resolve()
     {
         Node node;
-        if ((node = localIndex.get(refName)) != null) {
-            return node;
-        }
         if ((node = nodesIndex.get(refName)) != null) {
             return node;
         }
         throw new IllegalStateException("Unresolved node reference: " + refName);
     }
 
-    @Override protected Node
-    Clone(Map<String, Node> localIndex)
+    protected Node
+    Resolve(HashSet<Node> visitedNodes, TreeMap<Node, Node> nodeRefs)
     {
-        if (isCloned) {
-            return this;
+        if (nodeRefs.containsKey(refName)) {
+            return nodeRefs.get(refName);
         }
-        return CopyTo(localIndex, new SequenceNode(Resolve(localIndex).Clone(localIndex)));
+        Node target = Resolve();
+        if (target instanceof NodeRef) {
+            target = new SequenceNode(new Node[]{null});
+            nodeRefs.put(refName, target);
+        } else if (!visitedNodes.contains(target)) {
+            nodeRefs.put(refName, target);
+            target.Resolve(visitedNodes, nodeRefs);
+        }
+        visitedNodes.add(this);
+        return target;
+    }
+
+    @Override protected Node
+    Compile()
+    {
+        return CopyTo(new SequenceNode(Resolve().Compile()));
     }
 
     private final String refName;
@@ -243,60 +252,47 @@ public class CharNode extends Node {
         ranges.add(new RangeEntry(cMin, cMax, exclude));
         return this;
     }
-
-    @Override protected Node
-    Clone(Map<String, Node> localIndex)
-    {
-        /* Character node is immutable so this instance can be returned. */
-        return this;
-    }
 }
 
-public class SequenceNode extends Node {
+public class GroupNode extends Node {
+
+    private
+    GroupNode(Node... nodes)
+    {
+        this.nodes = nodes;
+    }
+
+    @Override protected Node
+    Resolve(HashSet<Node> visitedNodes, TreeMap<String, Node> nodeRefs)
+    {
+        visitedNodes.add(this);
+        for (Node node: nodes) {
+            if (!visitedNodes.contains(node)) {
+                node.Resolve(visitedNodes, nodeRefs);
+            }
+        }
+        return this;
+    }
+
+    protected final Node[] nodes;
+}
+
+public class SequenceNode extends GroupNode {
 
     private
     SequenceNode(Node... nodes)
     {
-        this.nodes = nodes;
+        super(nodes);
     }
 
-    private final Node[] nodes;
-
-    @Override protected Node
-    Clone(Map<String, Node> localIndex)
-    {
-        if (isCloned) {
-            return this;
-        }
-        Node[] newNodes = new Node[nodes.length];
-        for (int i = 0; i < nodes.length; i++) {
-            newNodes[i] = nodes[i].Clone(localIndex);
-        }
-        return CopyTo(localIndex, new SequenceNode(newNodes));
-    }
 }
 
-public class VariantsNode extends Node {
+public class VariantsNode extends GroupNode {
 
     private
     VariantsNode(Node... nodes)
     {
-        this.nodes = nodes;
-    }
-
-    private final Node[] nodes;
-
-    @Override protected Node
-    Clone(Map<String, Node> localIndex)
-    {
-        if (isCloned) {
-            return this;
-        }
-        Node[] newNodes = new Node[nodes.length];
-        for (int i = 0; i < nodes.length; i++) {
-            newNodes[i] = nodes[i].Clone(localIndex);
-        }
-        return CopyTo(localIndex, new VariantsNode(newNodes));
+        super(nodes);
     }
 }
 
@@ -375,20 +371,28 @@ Any(Node... nodes)
     return new VariantsNode(nodes);
 }
 
-/** Compile grammar into nodes tree.
- *
- * @param rootNodeName Name of the grammar root node.
- * @return Root node of the compiled tree.
- */
-public Node
-Compile(String rootNodeName)
+/** Compile grammar into nodes tree. This resolves all node references. */
+public void
+Compile()
 {
-    TreeMap<String, Node> localIndex = new TreeMap<>();
-    Node root = nodesIndex.get(rootNodeName);
-    if (root == null) {
-        throw new IllegalArgumentException("Specified root node not found: " + rootNodeName);
+    HashSet<Node> visitedNodes = new HashSet<>();
+    /* Resolved node references. Reference name mapped to node. Reference to NodeRef is transformed
+     * to either SequenceNode with one element (if this reference is named) or to resolved
+     * referenced node.
+     */
+    TreeMap<Node, Node> nodeRefs = new TreeMap<>();
+
+    for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
+        kv.getValue().Resolve(visitedNodes, nodeRefs);
     }
-    return root.Clone(localIndex);
+
+    for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
+        String name = kv.getKey();
+        Node node = kv.getValue();
+        if (node instanceof NodeRef) {
+            kv.setValue(nodeRefs.get(name));
+        }
+    }
 }
 
 private final TreeMap<String, Node> nodesIndex = new TreeMap<>();
