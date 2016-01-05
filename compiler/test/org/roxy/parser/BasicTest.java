@@ -15,7 +15,7 @@ Grammar grammar = new Grammar() {{
     Node("gap").Sequence(
         Any(NodeRef("whitespace").OneOrMany(),
             NodeRef("multiline-comment").OneOrMany()),
-        NodeRef("gap"));
+        NodeRef("gap").NoneOrMany());
 
     Node("string-literal").Sequence(
         Char('"'),
@@ -49,7 +49,9 @@ Grammar grammar = new Grammar() {{
             NodeRef("gap")
         ).NoneOrMany());
 
-    grammar.Compile();
+    System.out.print(FindNode("file"));
+    Compile();
+    System.out.print(FindNode("file"));
 }};
 
 @Test public void

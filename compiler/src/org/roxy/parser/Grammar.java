@@ -1,14 +1,13 @@
 package org.roxy.parser;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 /** Language grammar description. */
 public class Grammar {
 
-public class Node {
+private final String NODE_STR_INDENT = "    ";
+
+public abstract class Node {
 
     /** Set node name if not yet done. */
     public Node
@@ -73,6 +72,14 @@ public class Node {
         return Quantity(0, -1);
     }
 
+    @Override public String
+    toString()
+    {
+        return toString("", new HashSet<>());
+    }
+
+    // /////////////////////////////////////////////////////////////////////////////////////////////
+
     protected String name;
     protected int numMin, numMax;
     protected boolean quantityValid = false;
@@ -87,17 +94,37 @@ public class Node {
         return node;
     }
 
-    protected Node
-    Resolve(HashSet<Node> visitedNodes, TreeMap<String, Node> nodeRefs)
+    protected void
+    Compile(int pass, HashSet<Node> visitedNodes, HashMap<NodeRef, Node> nodeRefs)
     {
         visitedNodes.add(this);
-        return this;
     }
 
-    protected Node
-    Compile()
+    protected abstract String
+    toString(String indent, HashSet<Node> visitedNodes);
+
+    protected String
+    GetQuantityString()
     {
-        return this;
+        if (!quantityValid) {
+            return "";
+        }
+        if (numMin == 0 && numMax == 1) {
+            return "?";
+        }
+        if (numMin == 0 && numMax == -1) {
+            return "*";
+        }
+        if (numMin == 1 && numMax == -1) {
+            return "+";
+        }
+        if (numMin == numMax) {
+            return String.format("{%d}", numMin);
+        }
+        if (numMax == -1) {
+            return String.format("{%d,}", numMin);
+        }
+        return String.format("{%d,%d}", numMin, numMax);
     }
 }
 
@@ -150,28 +177,37 @@ public class NodeRef extends Node {
         throw new IllegalStateException("Unresolved node reference: " + refName);
     }
 
-    protected Node
-    Resolve(HashSet<Node> visitedNodes, TreeMap<Node, Node> nodeRefs)
+    protected void
+    Compile(int pass, HashSet<Node> visitedNodes, HashMap<NodeRef, Node> nodeRefs)
     {
-        if (nodeRefs.containsKey(refName)) {
-            return nodeRefs.get(refName);
-        }
-        Node target = Resolve();
-        if (target instanceof NodeRef) {
-            target = new SequenceNode(new Node[]{null});
-            nodeRefs.put(refName, target);
-        } else if (!visitedNodes.contains(target)) {
-            nodeRefs.put(refName, target);
-            target.Resolve(visitedNodes, nodeRefs);
-        }
         visitedNodes.add(this);
-        return target;
+        if (pass == 0) {
+            Node replacement;
+            if (name != null) {
+                replacement = new SequenceNode(new Node[]{null});
+            } else {
+                replacement = null;
+                Node target = Resolve();
+                if (!visitedNodes.contains(target)) {
+                    target.Compile(0, visitedNodes, nodeRefs);
+                }
+            }
+            nodeRefs.put(this, replacement);
+        } else {
+            throw new InternalError("Should not reach NodeRef in the second pass");
+        }
     }
 
-    @Override protected Node
-    Compile()
+    @Override protected String
+    toString(String indent, HashSet<Node> visitedNodes)
     {
-        return CopyTo(new SequenceNode(Resolve().Compile()));
+        if (visitedNodes.contains(this)) {
+            return String.format("%s`%s`", indent, name);
+        }
+        visitedNodes.add(this);
+        return String.format("%s`%s`: NodeRef%s\n%s\n", indent, name == null ? "" : name,
+                             GetQuantityString(),
+                             Resolve().toString(indent + NODE_STR_INDENT, visitedNodes));
     }
 
     private final String refName;
@@ -252,6 +288,25 @@ public class CharNode extends Node {
         ranges.add(new RangeEntry(cMin, cMax, exclude));
         return this;
     }
+
+    @Override protected String
+    toString(String indent, HashSet<Node> visitedNodes)
+    {
+        visitedNodes.add(this);
+        StringBuilder sb = new StringBuilder();
+        if (matchAny) {
+            sb.append('.');
+        }
+        for (RangeEntry re: ranges) {
+            if (re.cMin == re.cMax) {
+                sb.append(String.format("[%s%c]", re.exclude ? "^" : "", re.cMin));
+            } else {
+                sb.append(String.format("[%s%c-%c]", re.exclude ? "^" : "", re.cMin, re.cMax));
+            }
+        }
+        return String.format("%s`%s`: %s%s", indent, name == null ? "" : name, sb.toString(),
+                             GetQuantityString());
+    }
 }
 
 public class GroupNode extends Node {
@@ -262,16 +317,44 @@ public class GroupNode extends Node {
         this.nodes = nodes;
     }
 
-    @Override protected Node
-    Resolve(HashSet<Node> visitedNodes, TreeMap<String, Node> nodeRefs)
+    @Override protected void
+    Compile(int pass, HashSet<Node> visitedNodes, HashMap<NodeRef, Node> nodeRefs)
     {
         visitedNodes.add(this);
-        for (Node node: nodes) {
+        for (int i = 0; i < nodes.length; i++) {
+            Node node = nodes[i];
             if (!visitedNodes.contains(node)) {
-                node.Resolve(visitedNodes, nodeRefs);
+                if (pass == 1 && node instanceof NodeRef) {
+                    node = nodeRefs.get(node);
+                    nodes[i] = node;
+                }
+                node.Compile(pass, visitedNodes, nodeRefs);
             }
         }
-        return this;
+    }
+
+    @Override protected String
+    toString(String indent, HashSet<Node> visitedNodes)
+    {
+        if (visitedNodes.contains(this)) {
+            return String.format("%s`%s`", indent, name);
+        }
+        visitedNodes.add(this);
+        StringBuilder sb = new StringBuilder();
+        for (Node node: nodes) {
+            sb.append(node.toString(indent + NODE_STR_INDENT, visitedNodes));
+            sb.append('\n');
+        }
+        String type;
+        if (this instanceof SequenceNode) {
+            type = "Sequence";
+        } else if (this instanceof VariantsNode) {
+            type = "Variants";
+        } else {
+            throw new InternalError("Unhandled node type: " + getClass().getName());
+        }
+        return String.format("%s`%s`: %s%s\n%s", indent, name == null ? "" : name, type,
+                             GetQuantityString(), sb.toString());
     }
 
     protected final Node[] nodes;
@@ -284,7 +367,6 @@ public class SequenceNode extends GroupNode {
     {
         super(nodes);
     }
-
 }
 
 public class VariantsNode extends GroupNode {
@@ -376,23 +458,51 @@ public void
 Compile()
 {
     HashSet<Node> visitedNodes = new HashSet<>();
-    /* Resolved node references. Reference name mapped to node. Reference to NodeRef is transformed
-     * to either SequenceNode with one element (if this reference is named) or to resolved
-     * referenced node.
+    /* Resolved NodeRef nodes. NodeRef is transformed to either SequenceNode with one element (if
+     * this NodeRef is named) or to resolved referenced node.
      */
-    TreeMap<Node, Node> nodeRefs = new TreeMap<>();
+    HashMap<NodeRef, Node> nodeRefs = new HashMap<>();
 
     for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
-        kv.getValue().Resolve(visitedNodes, nodeRefs);
+        kv.getValue().Compile(0, visitedNodes, nodeRefs);
     }
 
-    for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
-        String name = kv.getKey();
+    /* nodeRefs now contains all NodeRef instances with either null for not yet resolved targets or
+     * SequenceNode for created replacements. Resolve unresolved targets now.
+     */
+    for (Map.Entry<NodeRef, Node> kv: nodeRefs.entrySet()) {
         Node node = kv.getValue();
-        if (node instanceof NodeRef) {
-            kv.setValue(nodeRefs.get(name));
+        Node target = nodesIndex.get(kv.getKey().refName);
+        if (target instanceof NodeRef) {
+            /* Named node always should have replacement available from the previous stage. */
+            target = nodeRefs.get(target);
+            assert target != null;
+        }
+        if (node == null) {
+            kv.setValue(target);
+        } else {
+            /* Fill sequence first (and only) member. */
+            ((SequenceNode)node).nodes[0] = target;
         }
     }
+
+    /* Now replace all NodeRef with their targets. */
+    visitedNodes.clear();
+    for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
+        Node node = kv.getValue();
+        if (node instanceof NodeRef) {
+            node = nodeRefs.get(node);
+            kv.setValue(node);
+        }
+        node.Compile(1, visitedNodes, nodeRefs);
+    }
+}
+
+/** Get node bye name. */
+public Node
+FindNode(String name)
+{
+    return nodesIndex.get(name);
 }
 
 private final TreeMap<String, Node> nodesIndex = new TreeMap<>();
