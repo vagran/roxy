@@ -94,10 +94,11 @@ public abstract class Node {
         return node;
     }
 
-    protected void
+    protected Node
     Compile(HashSet<Node> visitedNodes)
     {
         visitedNodes.add(this);
+        return this;
     }
 
     protected abstract String
@@ -177,11 +178,18 @@ public class NodeRef extends Node {
         throw new IllegalStateException("Unresolved node reference: " + refName);
     }
 
-    @Override protected void
+    @Override protected Node
     Compile(HashSet<Node> visitedNodes)
     {
+        if (compiledNode != null) {
+            return compiledNode;
+        }
         visitedNodes.add(this);
-        ref = Resolve();
+        compiledNode = new SequenceNode(new Node[]{null});
+        CopyTo(compiledNode);
+        compiledNode.nodes[0] = Resolve().Compile(visitedNodes);
+        compiledNode.Compile(visitedNodes);
+        return compiledNode;
     }
 
     @Override protected String
@@ -197,7 +205,7 @@ public class NodeRef extends Node {
     }
 
     private final String refName;
-    private Node ref;
+    private SequenceNode compiledNode;
 }
 
 public class CharNode extends Node {
@@ -304,14 +312,21 @@ public class GroupNode extends Node {
         this.nodes = nodes;
     }
 
-    @Override protected void
+    @Override protected Node
     Compile(HashSet<Node> visitedNodes)
     {
-        for (Node node: nodes) {
-            if (!visitedNodes.contains(node)) {
+        if (!visitedNodes.add(this)) {
+            return this;
+        }
+        for (int i = 0; i < nodes.length; i++) {
+            Node node = nodes[i];
+            if (node instanceof NodeRef) {
+                nodes[i] = node.Compile(visitedNodes);
+            } else if (!visitedNodes.contains(node)) {
                 node.Compile(visitedNodes);
             }
         }
+        return this;
     }
 
     @Override protected String
@@ -440,7 +455,11 @@ Compile()
 {
     HashSet<Node> visitedNodes = new HashSet<>();
     for (Map.Entry<String, Node> kv: nodesIndex.entrySet()) {
-        kv.getValue().Compile(visitedNodes);
+        Node node = kv.getValue();
+        Node compiledNode = node.Compile(visitedNodes);
+        if (compiledNode != node) {
+            kv.setValue(compiledNode);
+        }
     }
 }
 
