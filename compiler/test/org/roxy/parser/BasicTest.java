@@ -54,10 +54,21 @@ Grammar grammar = new Grammar() {{
     System.out.print(FindNode("file"));
 }};
 
+Grammar.Node fileNode = grammar.FindNode("file");
+
+String testFile1 =
+    "someIdent = \"some value \\aa\"bb\"\n" +
+    "\n" +
+    "   \t;a=1;b=2;/* Some comment a*b/*/\n" +
+    "/* multiline\r\n" +
+    "comment*/\r" +
+    "  c =   3;";
+
 @Test public void
 SomeTest()
 {
-
+    Parser parser = new Parser(fileNode, testFile1);
+    parser.Parse();
 }
 
 }
