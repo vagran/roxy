@@ -21,15 +21,15 @@ Grammar grammar = new Grammar() {{
         Char('"'),
         Any(AnyChar().Exclude("\"\\"),
             Sequence(Char('\\'), AnyChar())),
-        Char('"'));
+        Char('"')).Val();
 
-    Node("number-literal").Def(NodeRef("decimal-digit").OneOrMany());
+    Node("number-literal").Def(NodeRef("decimal-digit").OneOrMany()).Val();
 
     Node("identifier-first-char").Any(NodeRef("alphabetic"), Char('_'));
     Node("identifier-char").Any(NodeRef("identifier-first-char"), NodeRef("decimal-digit"));
     Node("identifier").Sequence(
         NodeRef("identifier-first-char"),
-        NodeRef("identifier-char").NoneOrMany());
+        NodeRef("identifier-char").NoneOrMany()).Val();
 
     Node("statement").Sequence(
         NodeRef("identifier"),
@@ -40,7 +40,7 @@ Grammar grammar = new Grammar() {{
             NodeRef("string-literal"),
             NodeRef("number-literal")),
         NodeRef("gap").NoneOrMany(),
-        Char(';'));
+        Char(';')).Val();
 
     Node("file").Sequence(
         NodeRef("gap").NoneOrMany(),

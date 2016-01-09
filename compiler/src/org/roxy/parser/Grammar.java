@@ -7,7 +7,10 @@ public class Grammar {
 
 private final String NODE_STR_INDENT = "    ";
 
-public abstract class Node {
+/** Grammar description node.
+ * Iterable interface should provide iteration of child nodes if any.
+ */
+public abstract class Node implements Iterable<Node> {
 
     /** Set node name if not yet done. */
     public Node
@@ -72,15 +75,43 @@ public abstract class Node {
         return Quantity(0, -1);
     }
 
+    /** Mark the node valuable to have in the parsed AST. */
+    public Node
+    Val()
+    {
+        isVal = true;
+        return this;
+    }
+
     @Override public String
     toString()
     {
         return toString("", new HashSet<>());
     }
 
+    /** Iterate over child nodes. Default implementation returns empty iterator. */
+    @Override public Iterator<Node>
+    iterator()
+    {
+        return new Iterator<Node>() {
+            @Override public boolean
+            hasNext()
+            {
+                return false;
+            }
+
+            @Override public Node
+            next()
+            {
+                throw new NoSuchElementException();
+            }
+        };
+    }
+
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     protected String name;
+    protected boolean isVal;
     protected int numMin, numMax;
     protected boolean quantityValid = false;
 
@@ -127,6 +158,31 @@ public abstract class Node {
         }
         return String.format("{%d,%d}", numMin, numMax);
     }
+
+    /** Utility method for creating iterator over nodes array. */
+    protected Iterator<Node>
+    GetArrayIterator(Node[] nodes)
+    {
+        return new Iterator<Node>() {
+            private int pos = 0;
+
+            @Override public boolean
+            hasNext()
+            {
+                return pos < nodes.length;
+            }
+
+            @Override public Node
+            next()
+            {
+                if (pos < nodes.length) {
+                    return nodes[pos++];
+                } else {
+                    throw new NoSuchElementException();
+                }
+            }
+        };
+    }
 }
 
 public class NodeBuilder {
@@ -140,7 +196,14 @@ public class NodeBuilder {
     public NodeBuilder
     Def(Node node)
     {
+        if (this.node != null) {
+            throw new IllegalStateException("Node already defined");
+        }
+        this.node = node;
         node.Name(name);
+        if (isVal) {
+            node.Val();
+        }
         return this;
     }
 
@@ -156,11 +219,29 @@ public class NodeBuilder {
         return Def(Grammar.this.Sequence(nodes));
     }
 
+    public NodeBuilder
+    Val()
+    {
+        isVal = true;
+        if (node != null) {
+            node.Val();
+        }
+        return this;
+    }
+
     private final String name;
+    private Node node;
+    private boolean isVal = false;
 }
 
 /** Transformed into sequence with one node. */
 public class NodeRef extends Node {
+
+    @Override public Iterator<Node>
+    iterator()
+    {
+        return GetArrayIterator(new Node[]{Resolve()});
+    }
 
     private
     NodeRef(String refName)
@@ -306,9 +387,18 @@ public class CharNode extends Node {
 
 public class GroupNode extends Node {
 
+    @Override public Iterator<Node>
+    iterator()
+    {
+        return GetArrayIterator(nodes);
+    }
+
     private
     GroupNode(Node... nodes)
     {
+        if (nodes.length == 0) {
+            throw new IllegalArgumentException("Group node should have non-empty content");
+        }
         this.nodes = nodes;
     }
 
