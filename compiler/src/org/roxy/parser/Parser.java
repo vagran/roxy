@@ -3,7 +3,7 @@ package org.roxy.parser;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
-import java.util.LinkedList;
+import java.util.ArrayList;
 
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
@@ -28,11 +28,16 @@ Parser(Grammar.Node grammar, String str)
 }
 
 public void/*XXX*/
-Parse()
-{
+Parse() throws IOException {
     InitializeState();
-    //XXX
-
+    while (true) {
+        int c = reader.read();
+        if (c == -1) {
+            Finalize();
+            return;
+        }
+        ProcessChar(c);
+    }
 }
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -69,6 +74,7 @@ private class ParserNode {
         this.grammarNode = grammarNode;
         astNode = null;
         numRepeated = 0;
+        refCount = 1;
     }
 
     public void
@@ -83,6 +89,12 @@ private class ParserNode {
         assert refCount > 0;
         refCount--;
         if (refCount == 0) {
+            if (parent != null) {
+                parent.Release();
+            }
+            if (prev != null) {
+                prev.Release();
+            }
             FreeNode(this);
         }
     }
@@ -91,8 +103,20 @@ private class ParserNode {
     SetParent(ParserNode parent)
     {
         assert this.parent == null;
-        this.parent = parent;
-        AddRef();
+        if (parent != null) {
+            this.parent = parent;
+            parent.AddRef();
+        }
+    }
+
+    public void
+    SetPrev(ParserNode prev)
+    {
+        assert this.prev == null;
+        if (prev != null) {
+            this.prev = prev;
+            prev.AddRef();
+        }
     }
 }
 
@@ -102,7 +126,9 @@ private final Reader reader;
 /** Free nodes pool. */
 private ParserNode freeNodes;
 /** Tips of current parsing branches. */
-private final LinkedList<ParserNode> curBranches = new LinkedList<>();
+private ArrayList<ParserNode> curBranches = new ArrayList<>(),
+/** Newly created branches for next character matching. */
+    nextBranches = new ArrayList<>();
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -143,7 +169,8 @@ private boolean
 InitializeState(ParserNode node, ArrayDeque<Grammar.Node> grammarStack)
 {
     if (grammarStack.contains(node.grammarNode)) {
-        throw new IllegalStateException("Invalid grammar recursion detected (empty element recursion)");
+        throw new IllegalStateException("Invalid grammar recursion detected " +
+            "(empty element recursion)");
     }
     grammarStack.push(node.grammarNode);
     boolean addNext = false;
@@ -180,6 +207,62 @@ InitializeState(ParserNode node, ArrayDeque<Grammar.Node> grammarStack)
     }
     grammarStack.pop();
     return addNext;
+}
+
+/** Called when input text is fully processed. */
+private void
+Finalize()
+{
+    //XXX
+}
+
+private void
+ProcessChar(int c)
+{
+    //XXX
+    for (ParserNode node: curBranches) {
+        if (!((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
+            node.Release();
+            continue;
+        }
+        //XXX handle lazy matching, remove branches in the same sequence
+
+        /* Find candidates for next character matching. */
+        FindNextCharNodes(node);
+    }
+
+    curBranches.clear();
+    ArrayList<ParserNode> swap = curBranches;
+    curBranches = nextBranches;
+    nextBranches = swap;
+
+    if (curBranches.size() == 0) {
+        //XXX try to parse the rest, find some candidates in grammar for continuing
+        throw new RuntimeException("Invalid syntax");//XXX temporal
+    } else if (curBranches.size() == 1) {
+        //XXX commit current branch
+    }
+}
+
+/** Find candidates for matching next character after the just matched node. Candidates are stored
+ * in "nextBranches" list.
+ */
+private void
+FindNextCharNodes(ParserNode node)
+{
+    int numMatches = node.numRepeated + 1;
+    if (numMatches < node.grammarNode.GetMaxQuantity()) {
+        ParserNode newNode = AllocateNode(node.grammarNode);
+        newNode.numRepeated = numMatches;
+        newNode.SetParent(node.parent);
+        newNode.SetPrev(node);
+        nextBranches.add(newNode);
+    }
+    if (numMatches < node.grammarNode.GetMinQuantity()) {
+        return;
+    }
+    /* Find nodes which follow the matched one. */
+    //XXX
 }
 
 }

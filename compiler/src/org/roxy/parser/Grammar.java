@@ -301,6 +301,7 @@ public class NodeRef extends Node {
     private SequenceNode compiledNode;
 }
 
+/** Excluded and included characters and ranges are applied sequentially (so order matters). */
 public class CharNode extends Node {
 
     /**
@@ -352,6 +353,21 @@ public class CharNode extends Node {
         return Range(cMin, cMax, true);
     }
 
+    /** Match the character against this node.
+     * @return True if the character matched, false otherwise.
+     */
+    public boolean
+    MatchChar(int c)
+    {
+        boolean match = matchAny;
+        for (RangeEntry re: ranges) {
+            if (re.MatchChar(c)) {
+                match = !re.exclude;
+            }
+        }
+        return match;
+    }
+
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     private class RangeEntry {
@@ -364,6 +380,12 @@ public class CharNode extends Node {
             this.cMin = cMin;
             this.cMax = cMax;
             this.exclude = exclude;
+        }
+
+        public boolean
+        MatchChar(int c)
+        {
+            return c >= cMin && c <= cMax;
         }
     }
 
