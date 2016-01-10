@@ -2,6 +2,8 @@ package org.roxy.parser;
 
 import org.junit.Test;
 
+import static utils.Utils.AssertThrows;
+
 public class BasicTest {
 
 Grammar grammar = new Grammar() {{
@@ -10,12 +12,12 @@ Grammar grammar = new Grammar() {{
     Node("alphabetic").Def(CharRange('a', 'z').IncludeRange('A', 'Z'));
     Node("whitespace").Def(AnyChar(" \t\r\n"));
 
-    Node("multiline-comment").Sequence(String("/*"), AnyChar().NoneOrMany(), String("*/"));
+    Node("multiline-comment").Sequence(String("/*"), AnyChar().NoneToMany(), String("*/"));
 
     Node("gap").Sequence(
-        Any(NodeRef("whitespace").OneOrMany(),
-            NodeRef("multiline-comment").OneOrMany()),
-        NodeRef("gap").NoneOrMany());
+        Any(NodeRef("whitespace").OneToMany(),
+            NodeRef("multiline-comment").OneToMany()),
+        NodeRef("gap").NoneToMany());
 
     Node("string-literal").Sequence(
         Char('"'),
@@ -23,31 +25,31 @@ Grammar grammar = new Grammar() {{
             Sequence(Char('\\'), AnyChar())),
         Char('"')).Val();
 
-    Node("number-literal").Def(NodeRef("decimal-digit").OneOrMany()).Val();
+    Node("number-literal").Def(NodeRef("decimal-digit").OneToMany()).Val();
 
     Node("identifier-first-char").Any(NodeRef("alphabetic"), Char('_'));
     Node("identifier-char").Any(NodeRef("identifier-first-char"), NodeRef("decimal-digit"));
     Node("identifier").Sequence(
         NodeRef("identifier-first-char"),
-        NodeRef("identifier-char").NoneOrMany()).Val();
+        NodeRef("identifier-char").NoneToMany()).Val();
 
     Node("statement").Sequence(
         NodeRef("identifier"),
-        NodeRef("gap").NoneOrMany(),
+        NodeRef("gap").NoneToMany(),
         Char('='),
-        NodeRef("gap").NoneOrMany(),
+        NodeRef("gap").NoneToMany(),
         Any(
             NodeRef("string-literal"),
             NodeRef("number-literal")),
-        NodeRef("gap").NoneOrMany(),
+        NodeRef("gap").NoneToMany(),
         Char(';')).Val();
 
     Node("file").Sequence(
-        NodeRef("gap").NoneOrMany(),
+        NodeRef("gap").NoneToMany(),
         Sequence(
             NodeRef("statement"),
             NodeRef("gap")
-        ).NoneOrMany());
+        ).NoneToMany());
 
     System.out.print(FindNode("file"));
     Compile();
@@ -69,6 +71,23 @@ SomeTest()
 {
     Parser parser = new Parser(fileNode, testFile1);
     parser.Parse();
+}
+
+@Test public void
+InvalidGrammar()
+{
+    Grammar invGrammar = new Grammar() {{
+        // Recursive definition with minimal size of zero characters.
+        Node("gap").Sequence(
+            Any(Char('q').NoneToMany(),
+                Char('w').NoneToMany()),
+            NodeRef("gap").NoneToMany());
+
+        Compile();
+        System.out.print(FindNode("gap"));
+    }};
+    Parser parser = new Parser(invGrammar.FindNode("gap"), "some string");
+    AssertThrows(IllegalStateException.class, parser::Parse);
 }
 
 }

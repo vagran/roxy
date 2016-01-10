@@ -13,7 +13,7 @@ private final String NODE_STR_INDENT = "    ";
 public abstract class Node implements Iterable<Node> {
 
     /** Set node name if not yet done. */
-    public Node
+    public final Node
     Name(String name)
     {
         if (this.name != null) {
@@ -27,13 +27,13 @@ public abstract class Node implements Iterable<Node> {
         return this;
     }
 
-    public Node
+    public final Node
     Optional()
     {
-        return NoneOrOne();
+        return NoneToOne();
     }
 
-    public Node
+    public final Node
     Quantity(int num)
     {
         return Quantity(num, num);
@@ -45,7 +45,7 @@ public abstract class Node implements Iterable<Node> {
      * @param numMin Minimal number of matches.
      * @param numMax Maximal number of matches. -1 for unlimited.
      */
-    public Node
+    public final Node
     Quantity(int numMin, int numMax)
     {
         if (quantityValid) {
@@ -57,26 +57,26 @@ public abstract class Node implements Iterable<Node> {
         return this;
     }
 
-    public Node
-    OneOrMany()
+    public final Node
+    OneToMany()
     {
         return Quantity(1, -1);
     }
 
-    public Node
-    NoneOrOne()
+    public final Node
+    NoneToOne()
     {
         return Quantity(0, 1);
     }
 
-    public Node
-    NoneOrMany()
+    public final Node
+    NoneToMany()
     {
         return Quantity(0, -1);
     }
 
     /** Mark the node valuable to have in the parsed AST. */
-    public Node
+    public final Node
     Val()
     {
         isVal = true;
@@ -108,11 +108,23 @@ public abstract class Node implements Iterable<Node> {
         };
     }
 
+    public final int
+    GetMinQuantity()
+    {
+        return numMin;
+    }
+
+    public final int
+    GetMaxQuantity()
+    {
+        return numMax;
+    }
+
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     protected String name;
     protected boolean isVal;
-    protected int numMin, numMax;
+    protected int numMin = 1, numMax = 1;
     protected boolean quantityValid = false;
 
     protected Node
@@ -138,7 +150,7 @@ public abstract class Node implements Iterable<Node> {
     protected String
     GetQuantityString()
     {
-        if (!quantityValid) {
+        if (!quantityValid || (numMin == 1 && numMax == 1)) {
             return "";
         }
         if (numMin == 0 && numMax == 1) {
