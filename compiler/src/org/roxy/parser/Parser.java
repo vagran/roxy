@@ -129,6 +129,7 @@ private ParserNode freeNodes;
 private ArrayList<ParserNode> curBranches = new ArrayList<>(),
 /** Newly created branches for next character matching. */
     nextBranches = new ArrayList<>();
+private ArrayDeque<Grammar.Node> branchesStack = new ArrayDeque<>();
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -154,19 +155,21 @@ FreeNode(ParserNode node)
 private void
 InitializeState()
 {
-    ArrayDeque<Grammar.Node> stack = new ArrayDeque<>();
-    InitializeState(AllocateNode(grammar), stack);
+    CreateBranches(AllocateNode(grammar), null, branchesStack);
+    SwapBranches();
 }
 
-/**
+/** Create branches for the specified node (traversing its children if necessary). Branches are
+ * populated in "nextBranches" member.
  *
- * @param node
+ * @param node Node to create branches for.
+ * @param prevNode Previous matched character node, null if none.
  * @param grammarStack Current stack of grammar nodes. Used to prevent from recursion. The recursion
  *                     can be used in grammar definition but not all recursion case are acceptable.
  * @return True to add also next sibling node (propagated to parent if last child node).
  */
 private boolean
-InitializeState(ParserNode node, ArrayDeque<Grammar.Node> grammarStack)
+CreateBranches(ParserNode node, ParserNode prevNode, ArrayDeque<Grammar.Node> grammarStack)
 {
     if (grammarStack.contains(node.grammarNode)) {
         throw new IllegalStateException("Invalid grammar recursion detected " +
@@ -180,7 +183,7 @@ InitializeState(ParserNode node, ArrayDeque<Grammar.Node> grammarStack)
         for (Grammar.Node childGrammarNode: node.grammarNode) {
             ParserNode childNode = AllocateNode(childGrammarNode);
             childNode.SetParent(node);
-            pendingAdd = InitializeState(childNode, grammarStack);
+            pendingAdd = CreateBranches(childNode, prevNode, grammarStack);
             if (!pendingAdd) {
                 break;
             }
@@ -193,16 +196,17 @@ InitializeState(ParserNode node, ArrayDeque<Grammar.Node> grammarStack)
         for (Grammar.Node childGrammarNode: node.grammarNode) {
             ParserNode childNode = AllocateNode(childGrammarNode);
             childNode.SetParent(node);
-            if (InitializeState(childNode, grammarStack)) {
+            if (CreateBranches(childNode, prevNode, grammarStack)) {
                 addNext = true;
             }
         }
 
     } else if (node.grammarNode instanceof Grammar.CharNode) {
-        curBranches.add(node);
+        nextBranches.add(node);
+        node.SetPrev(prevNode);
     }
 
-    if (node.grammarNode.GetMinQuantity() == 0) {
+    if (node.numRepeated >= node.grammarNode.GetMinQuantity()) {
         addNext = true;
     }
     grammarStack.pop();
@@ -219,7 +223,11 @@ Finalize()
 private void
 ProcessChar(int c)
 {
-    //XXX
+    if (curBranches.size() == 0) {
+        //XXX try to parse the rest, find some candidates in grammar for continuing
+        throw new RuntimeException("Invalid syntax");//XXX temporal
+    }
+
     for (ParserNode node: curBranches) {
         if (!((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
             node.Release();
@@ -231,38 +239,59 @@ ProcessChar(int c)
         FindNextCharNodes(node);
     }
 
-    curBranches.clear();
-    ArrayList<ParserNode> swap = curBranches;
-    curBranches = nextBranches;
-    nextBranches = swap;
+    SwapBranches();
 
-    if (curBranches.size() == 0) {
-        //XXX try to parse the rest, find some candidates in grammar for continuing
-        throw new RuntimeException("Invalid syntax");//XXX temporal
-    } else if (curBranches.size() == 1) {
+    if (curBranches.size() == 1) {
         //XXX commit current branch
     }
 }
 
+/** Make branches in "nextBranches" member be current branches ("curBranches" member). */
+private void
+SwapBranches()
+{
+    curBranches.clear();
+    ArrayList<ParserNode> swap = curBranches;
+    curBranches = nextBranches;
+    nextBranches = swap;
+}
+
 /** Find candidates for matching next character after the just matched node. Candidates are stored
  * in "nextBranches" list.
+ * @param matchedNode Matched character node.
  */
 private void
-FindNextCharNodes(ParserNode node)
+FindNextCharNodes(ParserNode matchedNode)
 {
-    int numMatches = node.numRepeated + 1;
-    if (numMatches < node.grammarNode.GetMaxQuantity()) {
-        ParserNode newNode = AllocateNode(node.grammarNode);
-        newNode.numRepeated = numMatches;
-        newNode.SetParent(node.parent);
-        newNode.SetPrev(node);
-        nextBranches.add(newNode);
+    branchesStack.clear();
+    ParserNode node = matchedNode;
+matchedNodeLoop:
+    while (node != null) {
+        int numMatches = node.numRepeated + 1;
+        if (numMatches < node.grammarNode.GetMaxQuantity()) {
+            /* Create new instance for the same node. */
+            ParserNode newNode = AllocateNode(node.grammarNode);
+            newNode.numRepeated = numMatches;
+            newNode.SetParent(node.parent);
+            if (!CreateBranches(newNode, matchedNode, branchesStack)) {
+                break;
+            }
+        }
+        /* Create next sibling node. */
+        while (true) {
+            Grammar.Node nextGrammarNode = node.grammarNode.GetNextSibling();
+            if (nextGrammarNode == null) {
+                node = node.parent;
+                continue matchedNodeLoop;
+            }
+            ParserNode newNode = AllocateNode(nextGrammarNode);
+            newNode.SetParent(node.parent);
+            if (!CreateBranches(newNode, matchedNode, branchesStack)) {
+                break matchedNodeLoop;
+            }
+            node = newNode;
+        }
     }
-    if (numMatches < node.grammarNode.GetMinQuantity()) {
-        return;
-    }
-    /* Find nodes which follow the matched one. */
-    //XXX
 }
 
 }

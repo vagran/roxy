@@ -120,12 +120,21 @@ public abstract class Node implements Iterable<Node> {
         return numMax;
     }
 
+    /** Get next sibling node when in sequence. Null for last node. */
+    public final Node
+    GetNextSibling()
+    {
+        return next;
+    }
+
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     protected String name;
     protected boolean isVal;
     protected int numMin = 1, numMax = 1;
     protected boolean quantityValid = false;
+    /** Next sibling node when in a sequence. */
+    protected Node next;
 
     protected Node
     CopyTo(Node node)
@@ -442,13 +451,19 @@ public class GroupNode extends Node {
         if (!visitedNodes.add(this)) {
             return this;
         }
+        Node prev = null;
         for (int i = 0; i < nodes.length; i++) {
             Node node = nodes[i];
             if (node instanceof NodeRef) {
-                nodes[i] = node.Compile(visitedNodes);
+                node = node.Compile(visitedNodes);
+                nodes[i] = node;
             } else if (!visitedNodes.contains(node)) {
                 node.Compile(visitedNodes);
             }
+            if (prev != null) {
+                prev.next = node;
+            }
+            prev = node;
         }
         return this;
     }

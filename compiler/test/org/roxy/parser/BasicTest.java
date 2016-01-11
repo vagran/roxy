@@ -2,6 +2,8 @@ package org.roxy.parser;
 
 import org.junit.Test;
 
+import java.io.IOException;
+
 import static utils.Utils.AssertThrows;
 
 public class BasicTest {
@@ -68,6 +70,7 @@ String testFile1 =
 
 @Test public void
 SomeTest()
+    throws IOException
 {
     Parser parser = new Parser(fileNode, testFile1);
     parser.Parse();
