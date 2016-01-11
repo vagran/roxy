@@ -120,6 +120,33 @@ private class ParserNode {
     }
 }
 
+/** Current position in input text. */
+private class InputPosition {
+    public int curOffset = 0, curLine = 1, curCol = 0;
+
+    public void
+    FeedChar(int c)
+    {
+        curOffset++;
+        if (c == '\n' || wasCr) {
+            curLine++;
+            curCol = 0;
+        } else if (c != '\r') {
+            curCol++;
+        }
+        wasCr = c == '\r';
+    }
+
+    @Override public String
+    toString()
+    {
+        return String.format("line %d column %d (offset %d)", curLine, curCol, curOffset);
+    }
+
+    /** CR character was the previous one. */
+    private boolean wasCr = false;
+}
+
 private final Grammar.Node grammar;
 private final Reader reader;
 
@@ -130,6 +157,7 @@ private ArrayList<ParserNode> curBranches = new ArrayList<>(),
 /** Newly created branches for next character matching. */
     nextBranches = new ArrayList<>();
 private ArrayDeque<Grammar.Node> branchesStack = new ArrayDeque<>();
+private InputPosition curPos = new InputPosition();
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -225,7 +253,7 @@ ProcessChar(int c)
 {
     if (curBranches.size() == 0) {
         //XXX try to parse the rest, find some candidates in grammar for continuing
-        throw new RuntimeException("Invalid syntax");//XXX temporal
+        throw new RuntimeException(String.format("Invalid syntax at %s", curPos));//XXX temporal
     }
 
     for (ParserNode node: curBranches) {
@@ -244,6 +272,8 @@ ProcessChar(int c)
     if (curBranches.size() == 1) {
         //XXX commit current branch
     }
+
+    curPos.FeedChar(c);
 }
 
 /** Make branches in "nextBranches" member be current branches ("curBranches" member). */

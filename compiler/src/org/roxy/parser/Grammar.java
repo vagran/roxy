@@ -460,10 +460,12 @@ public class GroupNode extends Node {
             } else if (!visitedNodes.contains(node)) {
                 node.Compile(visitedNodes);
             }
-            if (prev != null) {
-                prev.next = node;
+            if (this instanceof SequenceNode) {
+                if (prev != null) {
+                    prev.next = node;
+                }
+                prev = node;
             }
-            prev = node;
         }
         return this;
     }
