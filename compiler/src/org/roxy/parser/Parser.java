@@ -234,9 +234,10 @@ CreateBranches(ParserNode node, ParserNode prevNode, ArrayDeque<Grammar.Node> gr
         node.SetPrev(prevNode);
     }
 
-    if (node.numRepeated >= node.grammarNode.GetMinQuantity()) {
+    if (node.grammarNode.CheckQuantity(node.numRepeated) != Grammar.QuantityRange.NOT_ENOUGH) {
         addNext = true;
     }
+
     grammarStack.pop();
     return addNext;
 }
@@ -251,23 +252,28 @@ Finalize()
 private void
 ProcessChar(int c)
 {
-    if (curBranches.size() == 0) {
-        //XXX try to parse the rest, find some candidates in grammar for continuing
-        throw new RuntimeException(String.format("Invalid syntax at %s", curPos));//XXX temporal
-    }
-
+    int numBranchesMatched = 0;
     for (ParserNode node: curBranches) {
         if (!((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
             node.Release();
             continue;
         }
+        numBranchesMatched++;
         //XXX handle lazy matching, remove branches in the same sequence
 
         /* Find candidates for next character matching. */
         FindNextCharNodes(node);
+        node.Release();
+    }
+
+    if (numBranchesMatched == 0) {
+        //XXX try to parse the rest, find some candidates in grammar for continuing
+        throw new RuntimeException(String.format("Invalid syntax at %s, '%c'", curPos, c));//XXX temporal
     }
 
     SwapBranches();
+
+    System.out.format("'%c' at %s, %d branches\n", c, curPos, curBranches.size());//XXX
 
     if (curBranches.size() == 1) {
         //XXX commit current branch
@@ -298,7 +304,7 @@ FindNextCharNodes(ParserNode matchedNode)
 matchedNodeLoop:
     while (node != null) {
         int numMatches = node.numRepeated + 1;
-        if (numMatches < node.grammarNode.GetMaxQuantity()) {
+        if (node.grammarNode.CheckQuantity(numMatches) != Grammar.QuantityRange.MAX_REACHED) {
             /* Create new instance for the same node. */
             ParserNode newNode = AllocateNode(node.grammarNode);
             newNode.numRepeated = numMatches;

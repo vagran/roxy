@@ -7,6 +7,13 @@ public class Grammar {
 
 private final String NODE_STR_INDENT = "    ";
 
+/** Node matching count status. */
+enum QuantityRange {
+    NOT_ENOUGH,
+    ENOUGH,
+    MAX_REACHED
+}
+
 /** Grammar description node.
  * Iterable interface should provide iteration of child nodes if any.
  */
@@ -118,6 +125,18 @@ public abstract class Node implements Iterable<Node> {
     GetMaxQuantity()
     {
         return numMax;
+    }
+
+    public final QuantityRange
+    CheckQuantity(int count)
+    {
+        if (count < numMin) {
+            return QuantityRange.NOT_ENOUGH;
+        }
+        if (numMax == -1 || count < numMax) {
+            return QuantityRange.ENOUGH;
+        }
+        return QuantityRange.MAX_REACHED;
     }
 
     /** Get next sibling node when in sequence. Null for last node. */
