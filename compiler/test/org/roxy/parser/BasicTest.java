@@ -15,9 +15,9 @@ Grammar grammar = new Grammar() {{
     Node("multiline-comment").Sequence(String("/*"), AnyChar().NoneToMany(), String("*/"));
 
     Node("gap").Sequence(
-        Any(NodeRef("whitespace").OneToMany(),
-            NodeRef("multiline-comment").OneToMany()),
-        NodeRef("gap").NoneToMany());
+        Any(NodeRef("whitespace"),
+            NodeRef("multiline-comment")),
+        NodeRef("gap").NoneToMany());//XXX
 
     Node("string-literal").Sequence(
         Char('"'),
@@ -45,10 +45,10 @@ Grammar grammar = new Grammar() {{
         Char(';')).Val();
 
     Node("file").Sequence(
-        NodeRef("gap").NoneToMany(),
+        NodeRef("gap").NoneToOne(),
         Sequence(
             NodeRef("statement"),
-            NodeRef("gap")
+            NodeRef("gap").NoneToOne()
         ).NoneToMany());
 
     System.out.print(FindNode("file"));

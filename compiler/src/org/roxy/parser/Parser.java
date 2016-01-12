@@ -253,12 +253,14 @@ private void
 ProcessChar(int c)
 {
     int numBranchesMatched = 0;
+    ParserNode matchedBranch = null;
     for (ParserNode node: curBranches) {
         if (!((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
             node.Release();
             continue;
         }
         numBranchesMatched++;
+        matchedBranch = node;
         //XXX handle lazy matching, remove branches in the same sequence
 
         /* Find candidates for next character matching. */
@@ -275,8 +277,8 @@ ProcessChar(int c)
 
     System.out.format("'%c' at %s, %d branches\n", c, curPos, curBranches.size());//XXX
 
-    if (curBranches.size() == 1) {
-        //XXX commit current branch
+    if (numBranchesMatched == 1) {
+        //XXX commit matchedBranch
     }
 
     curPos.FeedChar(c);
