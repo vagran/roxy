@@ -14,10 +14,9 @@ Grammar grammar = new Grammar() {{
 
     Node("multiline-comment").Sequence(String("/*"), AnyChar().NoneToMany(), String("*/"));
 
-    Node("gap").Sequence(
-        Any(NodeRef("whitespace"),
-            NodeRef("multiline-comment")),
-        NodeRef("gap").NoneToMany());//XXX
+    Node("gap").Any(
+        NodeRef("whitespace"),
+        NodeRef("multiline-comment")).OneToMany();
 
     Node("string-literal").Sequence(
         Char('"'),
@@ -70,7 +69,7 @@ String testFile1 =
 SomeTest()
     throws IOException
 {
-    Parser parser = new Parser(fileNode, /*testFile1*/"                      ");
+    Parser parser = new Parser(fileNode, testFile1);
     parser.Parse();
 }
 

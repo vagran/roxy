@@ -13,6 +13,8 @@ Parser(Grammar.Node grammar, Reader reader)
 {
     this.grammar = grammar;
     this.reader = reader;
+    FindRecursions(grammar, new ArrayDeque<Grammar.Node>());
+    InitializeState();
 }
 
 public
@@ -28,8 +30,8 @@ Parser(Grammar.Node grammar, String str)
 }
 
 public void/*XXX*/
-Parse() throws IOException {
-    InitializeState();
+Parse() throws IOException
+{
     while (true) {
         int c = reader.read();
         if (c == -1) {
@@ -201,7 +203,7 @@ CreateBranches(ParserNode node, ParserNode prevNode, ArrayDeque<Grammar.Node> gr
 {
     if (grammarStack.contains(node.grammarNode)) {
         throw new IllegalStateException("Invalid grammar recursion detected " +
-            "(empty element recursion)");
+            "(instant recursive match)\n" + node.grammarNode.toString());
     }
     grammarStack.push(node.grammarNode);
     boolean addNext = false;
@@ -330,6 +332,126 @@ matchedNodeLoop:
             node = newNode;
         }
     }
+}
+
+private void
+FindRecursions(Grammar.Node node, ArrayDeque<Grammar.Node> parentNodes)
+{
+    if (parentNodes.contains(node)) {
+        ValidateRecursion(node);
+        return;
+    }
+    parentNodes.push(node);
+    for (Grammar.Node child: node) {
+        FindRecursions(child, parentNodes);
+    }
+    parentNodes.pop();
+}
+
+private void
+ValidateRecursion(Grammar.Node node)
+{
+    ValidateRecursion(node, node, 0, 1, true);
+}
+
+private static class VldRecResult {
+    int charsAccumulated;
+    boolean dropAccumulated;
+
+    VldRecResult(int charsAccumulated, boolean dropAccumulated)
+    {
+        this.charsAccumulated = charsAccumulated;
+        this.dropAccumulated = dropAccumulated;
+    }
+
+    static VldRecResult
+    TargetFound()
+    {
+        return new VldRecResult(0, true);
+    }
+}
+
+/**
+ *
+ * @param node Currently traversed node.
+ * @param targetNode Node recursion is being validated for.
+ * @param charsBefore Total minimal number of characters to be matched before the target node.
+ * @param maxMult Accumulated multiplier of maximal matching quantity for all parent node. -1 for
+ *                infinity.
+ * @return Accumulated characters information.
+ */
+private VldRecResult
+ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, int maxMult,
+                  boolean firstCall)
+{
+    if (!firstCall && node == targetNode) {
+        if (charsBefore == 0) {
+            throw new IllegalStateException("Invalid grammar recursion detected " +
+                                            "(instant recursive match)\n" + node.toString());
+        }
+        int _maxMult = MaxMult(maxMult, node.GetMaxQuantity());
+        if (_maxMult == -1 || _maxMult > 1) {
+            throw new IllegalStateException("Exponentially growing recursion\n" + node.toString());
+        }
+        return VldRecResult.TargetFound();
+    }
+
+    int accumulatedChars = 0;
+    boolean dropAccumulated = false;
+
+    if (node instanceof Grammar.SequenceNode) {
+        for (Grammar.Node child: node) {
+            VldRecResult res = ValidateRecursion(child, targetNode, charsBefore + accumulatedChars,
+                                                 MaxMult(maxMult, child.GetMaxQuantity()), false);
+            if (res.dropAccumulated) {
+                dropAccumulated = true;
+                accumulatedChars = 0;
+                charsBefore = 0;
+            }
+            accumulatedChars += res.charsAccumulated;
+        }
+
+    } else if (node instanceof Grammar.VariantsNode) {
+        int minChars = -1, minCharsWithDrop = -1;
+        for (Grammar.Node child: node) {
+            VldRecResult res = ValidateRecursion(child, targetNode, charsBefore,
+                                                 MaxMult(maxMult, child.GetMaxQuantity()), false);
+            if (res.dropAccumulated) {
+                if (minCharsWithDrop == -1 || res.charsAccumulated < minCharsWithDrop) {
+                    minCharsWithDrop = res.charsAccumulated;
+                }
+            } else if (minChars == -1 || res.charsAccumulated < minChars) {
+                minChars = res.charsAccumulated;
+            }
+        }
+        int totalMinChars = charsBefore;
+        if (minChars != -1) {
+            totalMinChars += minChars;
+        }
+        if (minChars == -1 || (minCharsWithDrop != -1 && totalMinChars > minCharsWithDrop)) {
+            accumulatedChars = minCharsWithDrop;
+            dropAccumulated = true;
+        } else {
+            accumulatedChars = minChars;
+        }
+
+    } else if (node instanceof Grammar.CharNode) {
+        accumulatedChars = 1;
+
+    } else {
+        throw new IllegalStateException("Unhandled node type " + node.getClass().getSimpleName());
+    }
+
+    return new VldRecResult(accumulatedChars * node.GetMinQuantity(), dropAccumulated);
+}
+
+private int
+MaxMult(int x, int y)
+{
+    if (x == -1 || y == -1) {
+        return -1;
+    }
+    return x * y;
 }
 
 }

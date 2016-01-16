@@ -233,7 +233,7 @@ public class NodeBuilder {
         this.name = name;
     }
 
-    public NodeBuilder
+    public Node
     Def(Node node)
     {
         if (this.node != null) {
@@ -244,29 +244,19 @@ public class NodeBuilder {
         if (isVal) {
             node.Val();
         }
-        return this;
+        return node;
     }
 
-    public NodeBuilder
+    public Node
     Any(Node... nodes)
     {
         return Def(Grammar.this.Any(nodes));
     }
 
-    public NodeBuilder
+    public Node
     Sequence(Node... nodes)
     {
         return Def(Grammar.this.Sequence(nodes));
-    }
-
-    public NodeBuilder
-    Val()
-    {
-        isVal = true;
-        if (node != null) {
-            node.Val();
-        }
-        return this;
     }
 
     private final String name;
