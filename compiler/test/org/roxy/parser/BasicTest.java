@@ -4,6 +4,8 @@ import org.junit.Test;
 
 import java.io.IOException;
 
+import static utils.Utils.AssertThrows;
+
 public class BasicTest {
 
 Grammar grammar = new Grammar() {{
@@ -12,7 +14,12 @@ Grammar grammar = new Grammar() {{
     Node("alphabetic").Def(CharRange('a', 'z').IncludeRange('A', 'Z'));
     Node("whitespace").Def(AnyChar(" \t\r\n"));
 
-    Node("multiline-comment").Sequence(String("/*"), AnyChar().NoneToMany(), String("*/"));
+    Node("multiline-comment").Sequence(
+        String("/*"),
+        Any(
+            AnyChar().Exclude('*').NoneToMany(),
+            Sequence(Char('*'), AnyChar().Exclude('/'))),
+        String("*/"));
 
     Node("gap").Any(
         NodeRef("whitespace"),
@@ -34,13 +41,13 @@ Grammar grammar = new Grammar() {{
 
     Node("statement").Sequence(
         NodeRef("identifier"),
-        NodeRef("gap").NoneToMany(),
+        NodeRef("gap").NoneToOne(),
         Char('='),
-        NodeRef("gap").NoneToMany(),
+        NodeRef("gap").NoneToOne(),
         Any(
             NodeRef("string-literal"),
             NodeRef("number-literal")),
-        NodeRef("gap").NoneToMany(),
+        NodeRef("gap").NoneToOne(),
         Char(';')).Val();
 
     Node("file").Sequence(
@@ -69,25 +76,87 @@ String testFile1 =
 SomeTest()
     throws IOException
 {
-    Parser parser = new Parser(fileNode, testFile1);
+    Parser parser = new Parser(fileNode, /*testFile1*/"                                         ");
     parser.Parse();
 }
 
-//@Test public void
-//InvalidGrammar()
-//{
-//    Grammar invGrammar = new Grammar() {{
-//        // Recursive definition with minimal size of zero characters.
-//        Node("gap").Sequence(
-//            Any(Char('q').NoneToMany(),
-//                Char('w').NoneToMany()),
-//            NodeRef("gap").NoneToMany());
-//
-//        Compile();
-//        System.out.print(FindNode("gap"));
-//    }};
-//    Parser parser = new Parser(invGrammar.FindNode("gap"), "some string");
-//    AssertThrows(IllegalStateException.class, parser::Parse);
-//}
+@Test public void
+InvalidGrammar()
+{
+    Grammar invGrammar = new Grammar() {{
+        // Recursive definition with minimal size of zero characters.
+        Node("gap").Sequence(
+            Any(Char('q').NoneToMany(),
+                Char('w').NoneToMany()),
+            NodeRef("gap").NoneToMany());
+
+        Compile();
+        System.out.print(FindNode("gap"));
+    }};
+    Parser parser = new Parser(invGrammar.FindNode("gap"), "some string");
+    AssertThrows(IllegalStateException.class, parser::Parse);
+}
+
+@Test public void
+UnclosedStringLiteral()
+    throws IOException
+{
+    Parser parser = new Parser(fileNode, "a = \"some value");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+}
+
+@Test public void
+Finalization()
+    throws IOException
+{
+    Grammar grammar = new Grammar() {{
+        Any(
+            Char('a').Quantity(3),
+            Char('a').Quantity(5)
+        ).Name("file");
+        Compile();
+        System.out.print(FindNode("file"));
+    }};
+    Parser parser = new Parser(grammar.FindNode("file"), "aa");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+
+    new Parser(grammar.FindNode("file"), "aaa").Parse();
+
+    parser = new Parser(grammar.FindNode("file"), "aaaa");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+
+    new Parser(grammar.FindNode("file"), "aaaaa").Parse();
+
+    parser = new Parser(grammar.FindNode("file"), "aaaaaa");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+}
+
+@Test public void
+Finalization2()
+    throws IOException
+{
+    Grammar grammar = new Grammar() {{
+        Any(
+            Char('a').Quantity(3, 5),
+            Char('a').Quantity(7)
+        ).Name("file");
+        Compile();
+        System.out.print(FindNode("file"));
+    }};
+    Parser parser = new Parser(grammar.FindNode("file"), "aa");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+
+    new Parser(grammar.FindNode("file"), "aaa").Parse();
+    new Parser(grammar.FindNode("file"), "aaaa").Parse();
+    new Parser(grammar.FindNode("file"), "aaaaa").Parse();
+
+    parser = new Parser(grammar.FindNode("file"), "aaaaaa");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+
+    new Parser(grammar.FindNode("file"), "aaaaaaa").Parse();
+
+    parser = new Parser(grammar.FindNode("file"), "aaaaaaaa");
+    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+}
 
 }

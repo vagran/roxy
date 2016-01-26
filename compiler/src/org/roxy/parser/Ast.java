@@ -9,6 +9,7 @@ public class Node {
 
     public StringBuilder str;
     public ArrayList<Node> children;
+    public Parser.InputPosition inputPosition;
 
     void
     AppendChar(int c)

@@ -8,6 +8,45 @@ import java.util.ArrayList;
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
 
+/** Current position in input text. */
+public static class InputPosition {
+    public int curOffset = 0, curLine = 1, curCol = 0;
+
+    public
+    InputPosition()
+    {}
+
+    public
+    InputPosition(InputPosition ip)
+    {
+        curOffset = ip.curOffset;
+        curLine = ip.curLine;
+        curCol = ip.curCol;
+    }
+
+    public void
+    FeedChar(int c)
+    {
+        curOffset++;
+        if (c == '\n' || wasCr) {
+            curLine++;
+            curCol = 0;
+        } else if (c != '\r') {
+            curCol++;
+        }
+        wasCr = c == '\r';
+    }
+
+    @Override public String
+    toString()
+    {
+        return String.format("line %d column %d (offset %d)", curLine, curCol, curOffset);
+    }
+
+    /** CR character was the previous one. */
+    private boolean wasCr = false;
+}
+
 public
 Parser(Grammar.Node grammar, Reader reader)
 {
@@ -61,7 +100,10 @@ private class ParserNode {
      * quantification points so far).
      */
     public int numRepeated;
-    public int charMatched = -1;
+    /** Character matched. */
+    public int matchedChar = -1;
+    /** Input position for matched character. */
+    public InputPosition inputPosition = null;
 
     public
     ParserNode(Grammar.Node grammarNode)
@@ -121,33 +163,6 @@ private class ParserNode {
             prev.AddRef();
         }
     }
-}
-
-/** Current position in input text. */
-private class InputPosition {
-    public int curOffset = 0, curLine = 1, curCol = 0;
-
-    public void
-    FeedChar(int c)
-    {
-        curOffset++;
-        if (c == '\n' || wasCr) {
-            curLine++;
-            curCol = 0;
-        } else if (c != '\r') {
-            curCol++;
-        }
-        wasCr = c == '\r';
-    }
-
-    @Override public String
-    toString()
-    {
-        return String.format("line %d column %d (offset %d)", curLine, curCol, curOffset);
-    }
-
-    /** CR character was the previous one. */
-    private boolean wasCr = false;
 }
 
 private final Grammar.Node grammar;
@@ -250,6 +265,10 @@ CreateBranches(ParserNode node, ParserNode prevNode, ArrayDeque<Grammar.Node> gr
 private void
 Finalize()
 {
+    int numBranchesMatched = 0;
+    for (ParserNode branch: curBranches) {
+
+    }
     //XXX
 }
 
@@ -258,11 +277,14 @@ ProcessChar(int c)
 {
     int numBranchesMatched = 0;
     ParserNode matchedBranch = null;
+    InputPosition _curPos = new InputPosition(curPos);
     for (ParserNode node: curBranches) {
         if (!((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
             node.Release();
             continue;
         }
+        node.matchedChar = c;
+        node.inputPosition = _curPos;
         numBranchesMatched++;
         matchedBranch = node;
         //XXX handle lazy matching, remove branches in the same sequence
@@ -288,7 +310,9 @@ ProcessChar(int c)
     curPos.FeedChar(c);
 }
 
-/** Make branches in "nextBranches" member be current branches ("curBranches" member). */
+/** Make branches in "nextBranches" member be current branches ("curBranches" member). Reference to
+ * nodes in curBranches should already be released.
+ */
 private void
 SwapBranches()
 {
@@ -460,9 +484,9 @@ private void
 CommitBranch(ParserNode branch)
 {
     ArrayDeque<ParserNode> nodes = new ArrayDeque<>();
-    ParserNode node = branch.prev;
+    ParserNode node = branch;
     while (node != null) {
-        nodes.add(node);
+        nodes.addFirst(node);
         node = node.prev;
     }
 
@@ -473,13 +497,14 @@ CommitBranch(ParserNode branch)
         while (node != null) {
             if (node.astNode == null && node.grammarNode.isVal) {
                 node.astNode = ast.CreateNode();
+                node.astNode.inputPosition = charNode.inputPosition;
                 astCreated = true;
             } else if (node.astNode != null) {
                 astCreated = false;
             }
             if (node.astNode != null) {
                 if (astNode == null && node.grammarNode.wantString) {
-                    node.astNode.AppendChar(charNode.charMatched);
+                    node.astNode.AppendChar(charNode.matchedChar);
                 } else if (astNode != null) {
                     node.astNode.AppendChild(astNode);
                 }
@@ -492,11 +517,9 @@ CommitBranch(ParserNode branch)
         }
     }
 
-    node = branch.prev;
-    if (node != null) {
-        branch.prev = null;
-        /* Will free all referenced nodes graph. */
-        node.Release();
+    for (ParserNode nextBranch: curBranches) {
+        nextBranch.prev.Release();
+        nextBranch.prev = null;
     }
 }
 
