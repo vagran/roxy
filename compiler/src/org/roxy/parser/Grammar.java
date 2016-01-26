@@ -149,7 +149,7 @@ public abstract class Node implements Iterable<Node> {
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     protected String name;
-    protected boolean isVal;
+    boolean isVal, wantString;
     protected int numMin = 1, numMax = 1;
     protected boolean quantityValid = false;
     /** Next sibling node when in a sequence. */

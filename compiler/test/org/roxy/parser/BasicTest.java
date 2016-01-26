@@ -48,7 +48,7 @@ Grammar grammar = new Grammar() {{
         Sequence(
             NodeRef("statement"),
             NodeRef("gap").NoneToOne()
-        ).NoneToMany());
+        ).NoneToMany()).Val();
 
     System.out.print(FindNode("file"));
     Compile();

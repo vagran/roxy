@@ -13,7 +13,7 @@ Parser(Grammar.Node grammar, Reader reader)
 {
     this.grammar = grammar;
     this.reader = reader;
-    FindRecursions(grammar, new ArrayDeque<Grammar.Node>());
+    FindRecursions(grammar, new ArrayDeque<>());
     InitializeState();
 }
 
@@ -61,6 +61,7 @@ private class ParserNode {
      * quantification points so far).
      */
     public int numRepeated;
+    public int charMatched = -1;
 
     public
     ParserNode(Grammar.Node grammarNode)
@@ -160,6 +161,7 @@ private ArrayList<ParserNode> curBranches = new ArrayList<>(),
     nextBranches = new ArrayList<>();
 private ArrayDeque<Grammar.Node> branchesStack = new ArrayDeque<>();
 private InputPosition curPos = new InputPosition();
+private Ast ast = new Ast();
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -280,7 +282,7 @@ ProcessChar(int c)
     System.out.format("'%c' at %s, %d branches\n", c, curPos, curBranches.size());//XXX
 
     if (numBranchesMatched == 1) {
-        //XXX commit matchedBranch
+        CommitBranch(matchedBranch);
     }
 
     curPos.FeedChar(c);
@@ -452,6 +454,50 @@ MaxMult(int x, int y)
         return -1;
     }
     return x * y;
+}
+
+private void
+CommitBranch(ParserNode branch)
+{
+    ArrayDeque<ParserNode> nodes = new ArrayDeque<>();
+    ParserNode node = branch.prev;
+    while (node != null) {
+        nodes.add(node);
+        node = node.prev;
+    }
+
+    for (ParserNode charNode: nodes) {
+        node = charNode;
+        Ast.Node astNode = null;
+        boolean astCreated = false;
+        while (node != null) {
+            if (node.astNode == null && node.grammarNode.isVal) {
+                node.astNode = ast.CreateNode();
+                astCreated = true;
+            } else if (node.astNode != null) {
+                astCreated = false;
+            }
+            if (node.astNode != null) {
+                if (astNode == null && node.grammarNode.wantString) {
+                    node.astNode.AppendChar(charNode.charMatched);
+                } else if (astNode != null) {
+                    node.astNode.AppendChild(astNode);
+                }
+                astNode = node.astNode;
+            }
+            if (astNode != null && !astCreated) {
+                break;
+            }
+            node = node.parent;
+        }
+    }
+
+    node = branch.prev;
+    if (node != null) {
+        branch.prev = null;
+        /* Will free all referenced nodes graph. */
+        node.Release();
+    }
 }
 
 }
