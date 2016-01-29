@@ -17,8 +17,8 @@ Grammar grammar = new Grammar() {{
     Node("multiline-comment").Sequence(
         String("/*"),
         Any(
-            AnyChar().Exclude('*').NoneToMany(),
-            Sequence(Char('*'), AnyChar().Exclude('/'))),
+            AnyChar().Exclude('*'),
+            Sequence(Char('*'), AnyChar().Exclude('/'))).NoneToMany(),
         String("*/"));
 
     Node("gap").Any(
@@ -73,10 +73,22 @@ String testFile1 =
     "  c =   3;";
 
 @Test public void
-SomeTest()
+Basic()
     throws IOException
 {
-    Parser parser = new Parser(fileNode, /*testFile1*/"                                         ");
+    Parser parser = new Parser(fileNode, testFile1);
+    parser.Parse();
+}
+
+@Test public void
+Spaces()
+    throws IOException
+{
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 1000; i++) {
+        sb.append(' ');
+    }
+    Parser parser = new Parser(fileNode, sb.toString());
     parser.Parse();
 }
 

@@ -7,9 +7,11 @@ public class Ast {
 
 public class Node {
 
+    public Grammar.Node grammarNode;
     public StringBuilder str;
+    public Node parent;
     public ArrayList<Node> children;
-    public Parser.InputPosition inputPosition;
+    public Parser.InputPosition startPosition, endPosition;
 
     void
     AppendChar(int c)
@@ -17,7 +19,7 @@ public class Node {
         if (str == null) {
             str = new StringBuilder();
         }
-        str.append(c);
+        str.append((char)c);
     }
 
     void
@@ -27,6 +29,29 @@ public class Node {
             children = new ArrayList<>();
         }
         children.add(child);
+        child.parent = this;
+    }
+
+    /** Called when all characters or sub-nodes added. */
+    void
+    Commit(Parser.InputPosition endPosition)
+    {
+        assert this.endPosition == null;
+        this.endPosition = endPosition;
+    }
+
+    /** Check if the specified node is ancestor of this node. Returns also true for the same node. */
+    boolean
+    IsAncestor(Node ancestor)
+    {
+        Node node = this;
+        while (node != null) {
+            if (node == ancestor) {
+                return true;
+            }
+            node = node.parent;
+        }
+        return false;
     }
 }
 

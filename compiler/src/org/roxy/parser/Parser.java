@@ -175,8 +175,11 @@ private ArrayList<ParserNode> curBranches = new ArrayList<>(),
 /** Newly created branches for next character matching. */
     nextBranches = new ArrayList<>();
 private ArrayDeque<Grammar.Node> branchesStack = new ArrayDeque<>();
-private InputPosition curPos = new InputPosition();
+private InputPosition curPos = new InputPosition(),
+/** Previous character position, immutable. */
+    prevPos;
 private Ast ast = new Ast();
+private Ast.Node lastAstNode;
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -270,6 +273,8 @@ Finalize()
 
     }
     //XXX
+
+    CommitAstNodes(null);
 }
 
 private void
@@ -306,6 +311,7 @@ ProcessChar(int c)
     if (numBranchesMatched == 1) {
         CommitBranch(matchedBranch);
     }
+    prevPos = _curPos;
 
     curPos.FeedChar(c);
 }
@@ -402,12 +408,12 @@ private static class VldRecResult {
  * @param node Currently traversed node.
  * @param targetNode Node recursion is being validated for.
  * @param charsBefore Total minimal number of characters to be matched before the target node.
- * @param maxMult Accumulated multiplier of maximal matching quantity for all parent node. -1 for
- *                infinity.
+ * @param maxMultiplier Accumulated multiplier of maximal matching quantity for all parent node.
+ *                      -1 for infinity.
  * @return Accumulated characters information.
  */
 private VldRecResult
-ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, int maxMult,
+ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, int maxMultiplier,
                   boolean firstCall)
 {
     if (!firstCall && node == targetNode) {
@@ -415,8 +421,8 @@ ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, i
             throw new IllegalStateException("Invalid grammar recursion detected " +
                                             "(instant recursive match)\n" + node.toString());
         }
-        int _maxMult = MaxMult(maxMult, node.GetMaxQuantity());
-        if (_maxMult == -1 || _maxMult > 1) {
+        int _maxMultiplier = MaxMultiplier(maxMultiplier, node.GetMaxQuantity());
+        if (_maxMultiplier == -1 || _maxMultiplier > 1) {
             throw new IllegalStateException("Exponentially growing recursion\n" + node.toString());
         }
         return VldRecResult.TargetFound();
@@ -428,7 +434,8 @@ ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, i
     if (node instanceof Grammar.SequenceNode) {
         for (Grammar.Node child: node) {
             VldRecResult res = ValidateRecursion(child, targetNode, charsBefore + accumulatedChars,
-                                                 MaxMult(maxMult, child.GetMaxQuantity()), false);
+                                                 MaxMultiplier(maxMultiplier, child.GetMaxQuantity()),
+                                                 false);
             if (res.dropAccumulated) {
                 dropAccumulated = true;
                 accumulatedChars = 0;
@@ -441,7 +448,8 @@ ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, i
         int minChars = -1, minCharsWithDrop = -1;
         for (Grammar.Node child: node) {
             VldRecResult res = ValidateRecursion(child, targetNode, charsBefore,
-                                                 MaxMult(maxMult, child.GetMaxQuantity()), false);
+                                                 MaxMultiplier(maxMultiplier, child.GetMaxQuantity()),
+                                                 false);
             if (res.dropAccumulated) {
                 if (minCharsWithDrop == -1 || res.charsAccumulated < minCharsWithDrop) {
                     minCharsWithDrop = res.charsAccumulated;
@@ -472,7 +480,7 @@ ValidateRecursion(Grammar.Node node, Grammar.Node targetNode, int charsBefore, i
 }
 
 private int
-MaxMult(int x, int y)
+MaxMultiplier(int x, int y)
 {
     if (x == -1 || y == -1) {
         return -1;
@@ -492,13 +500,17 @@ CommitBranch(ParserNode branch)
 
     for (ParserNode charNode: nodes) {
         node = charNode;
-        Ast.Node astNode = null;
+        Ast.Node astNode = null, firstAstNode = null;
         boolean astCreated = false;
         while (node != null) {
             if (node.astNode == null && node.grammarNode.isVal) {
                 node.astNode = ast.CreateNode();
-                node.astNode.inputPosition = charNode.inputPosition;
+                node.astNode.grammarNode = node.grammarNode;
+                node.astNode.startPosition = charNode.inputPosition;
                 astCreated = true;
+                if (firstAstNode == null) {
+                    firstAstNode = node.astNode;
+                }
             } else if (node.astNode != null) {
                 astCreated = false;
             }
@@ -515,12 +527,30 @@ CommitBranch(ParserNode branch)
             }
             node = node.parent;
         }
+        if (firstAstNode != null) {
+            CommitAstNodes(firstAstNode);
+        }
     }
 
     for (ParserNode nextBranch: curBranches) {
         nextBranch.prev.Release();
         nextBranch.prev = null;
     }
+}
+
+/** Commit all AST nodes which precede the specified new node.
+ *
+ * @param newNode Newly create node. Can be null to commit all uncommitted nodes (on finalization).
+ */
+private void
+CommitAstNodes(Ast.Node newNode)
+{
+    Ast.Node node = lastAstNode;
+    while (node != null && (newNode == null || !newNode.IsAncestor(node))) {
+        node.Commit(prevPos);
+        node = node.parent;
+    }
+    lastAstNode = newNode;
 }
 
 }
