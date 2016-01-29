@@ -8,7 +8,7 @@ public class Grammar {
 private final String NODE_STR_INDENT = "    ";
 
 /** Node matching count status. */
-enum QuantityRange {
+enum QuantityStatus {
     NOT_ENOUGH,
     ENOUGH,
     MAX_REACHED
@@ -127,16 +127,16 @@ public abstract class Node implements Iterable<Node> {
         return numMax;
     }
 
-    public final QuantityRange
+    public final QuantityStatus
     CheckQuantity(int count)
     {
         if (count < numMin) {
-            return QuantityRange.NOT_ENOUGH;
+            return QuantityStatus.NOT_ENOUGH;
         }
         if (numMax == -1 || count < numMax) {
-            return QuantityRange.ENOUGH;
+            return QuantityStatus.ENOUGH;
         }
-        return QuantityRange.MAX_REACHED;
+        return QuantityStatus.MAX_REACHED;
     }
 
     /** Get next sibling node when in sequence. Null for last node. */

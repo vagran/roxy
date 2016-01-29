@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Formatter;
 
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
@@ -47,6 +48,57 @@ public static class InputPosition {
     private boolean wasCr = false;
 }
 
+/** Parsing summary result is reported into this class. Parsing progress can be monitored in real
+ * time if this class is subclassed.
+ */
+public static class Summary {
+
+    void
+    Error(InputPosition inputPosition, String message, Object... args)
+    {
+        //XXX inputPosition
+        buf.append("Error: ");
+        formatter.format(message, args);
+        buf.append('\n');
+        numErrors++;
+    }
+
+    void
+    Error(String message, Object... args)
+    {
+        Error(null, message, args);
+    }
+
+    void
+    Warnings(InputPosition inputPosition, String message, Object... args)
+    {
+        //XXX inputPosition
+        buf.append("Warning: ");
+        formatter.format(message, args);
+        buf.append('\n');
+        numWarnings++;
+    }
+
+    void
+    Warnings(String message, Object... args)
+    {
+        Warnings(null, message, args);
+    }
+
+    @Override public String
+    toString()
+    {
+        StringBuilder sb = new StringBuilder(buf);
+        sb.append("===========================================================\n");
+        sb.append(String.format("%d errors, %d warnings", numErrors, numWarnings));
+        return sb.toString();
+    }
+
+    private StringBuilder buf = new StringBuilder();
+    private Formatter formatter = new Formatter(buf);
+    private int numErrors, numWarnings;
+}
+
 public
 Parser(Grammar.Node grammar, Reader reader)
 {
@@ -69,8 +121,9 @@ Parser(Grammar.Node grammar, String str)
 }
 
 public void/*XXX*/
-Parse() throws IOException
+Parse(Summary summary) throws IOException
 {
+    this.summary = summary;
     while (true) {
         int c = reader.read();
         if (c == -1) {
@@ -79,6 +132,18 @@ Parse() throws IOException
         }
         ProcessChar(c);
     }
+}
+
+public void
+Parse() throws IOException
+{
+    Parse(new Summary());
+}
+
+public Summary
+GetSummary()
+{
+    return summary;
 }
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -92,7 +157,7 @@ private class ParserNode {
      * member) and child nodes (via "parent" member).
      */
     public int refCount;
-    /** Corresponding grammar node. */
+    /** Corresponding grammar node. Null for end-of-file node. */
     public Grammar.Node grammarNode;
     /** Assigned AST node if committed and valuable. */
     public Ast.Node astNode;
@@ -180,6 +245,7 @@ private InputPosition curPos = new InputPosition(),
     prevPos;
 private Ast ast = new Ast();
 private Ast.Node lastAstNode;
+private Summary summary;
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -256,7 +322,7 @@ CreateBranches(ParserNode node, ParserNode prevNode, ArrayDeque<Grammar.Node> gr
         node.SetPrev(prevNode);
     }
 
-    if (node.grammarNode.CheckQuantity(node.numRepeated) != Grammar.QuantityRange.NOT_ENOUGH) {
+    if (node.grammarNode.CheckQuantity(node.numRepeated) != Grammar.QuantityStatus.NOT_ENOUGH) {
         addNext = true;
     }
 
@@ -268,7 +334,9 @@ CreateBranches(ParserNode node, ParserNode prevNode, ArrayDeque<Grammar.Node> gr
 private void
 Finalize()
 {
-    int numBranchesMatched = 0;
+    /* Check if we have end-of-file node in current branches list. If there are several ones then
+     * there is an ambiguity. If there is no end-of-file node then there is incomplete node(s).
+     */
     for (ParserNode branch: curBranches) {
 
     }
@@ -284,7 +352,7 @@ ProcessChar(int c)
     ParserNode matchedBranch = null;
     InputPosition _curPos = new InputPosition(curPos);
     for (ParserNode node: curBranches) {
-        if (!((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
+        if (node.grammarNode == null || !((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
             node.Release();
             continue;
         }
@@ -340,7 +408,7 @@ FindNextCharNodes(ParserNode matchedNode)
 matchedNodeLoop:
     while (node != null) {
         int numMatches = node.numRepeated + 1;
-        if (node.grammarNode.CheckQuantity(numMatches) != Grammar.QuantityRange.MAX_REACHED) {
+        if (node.grammarNode.CheckQuantity(numMatches) != Grammar.QuantityStatus.MAX_REACHED) {
             /* Create new instance for the same node. */
             ParserNode newNode = AllocateNode(node.grammarNode);
             newNode.numRepeated = numMatches;
@@ -363,6 +431,12 @@ matchedNodeLoop:
             }
             node = newNode;
         }
+    }
+    if (node == null) {
+        /* End-of-file node if reached root. */
+        ParserNode eof = new ParserNode(null);
+        eof.SetPrev(matchedNode);
+        nextBranches.add(eof);
     }
 }
 
