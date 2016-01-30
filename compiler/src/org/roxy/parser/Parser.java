@@ -4,10 +4,21 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Formatter;
+import java.util.HashSet;
 
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
+
+public enum ErrorCode {
+    INCOMPLETE_NODE,
+    INCOMPLETE_NODE_CANDIDATE,
+    AMBIGUOUS_SYNTAX,
+    AMBIGUOUS_SYNTAX_CANDIDATE
+}
+
+public enum WarnCode {
+
+}
 
 /** Current position in input text. */
 public static class InputPosition {
@@ -41,7 +52,7 @@ public static class InputPosition {
     @Override public String
     toString()
     {
-        return String.format("line %d column %d (offset %d)", curLine, curCol, curOffset);
+        return String.format("Line %d column %d (offset %d)", curLine, curCol, curOffset);
     }
 
     /** CR character was the previous one. */
@@ -53,55 +64,180 @@ public static class InputPosition {
  */
 public static class Summary {
 
+    public enum RecordType {
+        ERROR,
+        WARNING,
+        INFO,
+        VERBOSE
+    }
+
+    public static class Record {
+        public final RecordType type;
+        /* -1 if not specified. */
+        public final int code;
+        /* May be null if not position-bound. */
+        public final InputPosition inputPosition;
+        public final String message;
+
+        public
+        Record(RecordType type, int code, InputPosition inputPosition,
+               String message, Object... fmtArgs)
+        {
+            this.type = type;
+            this.code = code;
+            this.inputPosition = inputPosition;
+            this.message = String.format(message, fmtArgs);
+        }
+
+        @Override public String
+        toString() {
+            StringBuilder sb = new StringBuilder();
+            if (inputPosition != null) {
+                sb.append(inputPosition.toString());
+                sb.append(": ");
+            }
+            if (type == RecordType.ERROR) {
+                sb.append("Error");
+            } else if (type == RecordType.WARNING) {
+                sb.append("Warning");
+            }
+            if (code != -1) {
+                switch (type) {
+                case ERROR:
+                    sb.append(" E");
+                    break;
+                case WARNING:
+                    sb.append(" W");
+                    break;
+                case INFO:
+                    sb.append('I');
+                    break;
+                case VERBOSE:
+                    sb.append('V');
+                    break;
+                default:
+                    throw new RuntimeException("Unhandled record type: " + type);
+                }
+                sb.append(code);
+                sb.append(": ");
+            } else if (type == RecordType.ERROR || type == RecordType.WARNING) {
+                sb.append(": ");
+            }
+            sb.append(message);
+            return sb.toString();
+        }
+    }
+
+    public ArrayList<Record> records = new ArrayList<>();
+
     void
-    Error(InputPosition inputPosition, String message, Object... args)
+    Error(InputPosition inputPosition, int code, String message, Object... fmtArgs)
     {
-        //XXX inputPosition
-        buf.append("Error: ");
-        formatter.format(message, args);
-        buf.append('\n');
+        records.add(new Record(RecordType.ERROR, code, inputPosition, message, fmtArgs));
         numErrors++;
     }
 
     void
-    Error(String message, Object... args)
+    Error(int code, String message, Object... fmtArgs)
     {
-        Error(null, message, args);
+        Error(null, code, message, fmtArgs);
     }
 
     void
-    Warnings(InputPosition inputPosition, String message, Object... args)
+    Error(InputPosition inputPosition, String message, Object... fmtArgs)
     {
-        //XXX inputPosition
-        buf.append("Warning: ");
-        formatter.format(message, args);
-        buf.append('\n');
+        Error(inputPosition, -1, message, fmtArgs);
+    }
+
+    void
+    Error(String message, Object... fmtArgs)
+    {
+        Error(null, -1, message, fmtArgs);
+    }
+
+    void
+    Warning(InputPosition inputPosition, int code, String message, Object... fmtArgs)
+    {
+        records.add(new Record(RecordType.WARNING, code, inputPosition, message, fmtArgs));
         numWarnings++;
     }
 
     void
-    Warnings(String message, Object... args)
+    Warning(int code, String message, Object... fmtArgs)
     {
-        Warnings(null, message, args);
+        Warning(null, code, message, fmtArgs);
+    }
+
+    void
+    Warning(InputPosition inputPosition, String message, Object... fmtArgs)
+    {
+        Warning(inputPosition, -1, message, fmtArgs);
+    }
+
+    void
+    Warning(String message, Object... fmtArgs)
+    {
+        Warning(null, -1, message, fmtArgs);
+    }
+
+    void
+    Info(InputPosition inputPosition, int code, String message, Object... fmtArgs)
+    {
+        records.add(new Record(RecordType.INFO, code, inputPosition, message, fmtArgs));
+    }
+
+    void
+    Info(InputPosition inputPosition, String message, Object... fmtArgs)
+    {
+        Info(inputPosition, -1, message, fmtArgs);
+    }
+
+    void
+    Info(int code, String message, Object... fmtArgs)
+    {
+        Info(null, code, message, fmtArgs);
+    }
+
+    void
+    Info(String message, Object... fmtArgs)
+    {
+        Info(null, -1, message, fmtArgs);
+    }
+
+    void
+    Verbose(InputPosition inputPosition, String message, Object... fmtArgs)
+    {
+        records.add(new Record(RecordType.VERBOSE, -1, inputPosition, message, fmtArgs));
+    }
+
+    void
+    Verbose(String message, Object... fmtArgs)
+    {
+        Verbose(null, message, fmtArgs);
     }
 
     @Override public String
     toString()
     {
-        StringBuilder sb = new StringBuilder(buf);
+        StringBuilder sb = new StringBuilder();
+        for (Record rec: records) {
+            sb.append(rec.toString());
+            sb.append('\n');
+        }
         sb.append("===========================================================\n");
         sb.append(String.format("%d errors, %d warnings", numErrors, numWarnings));
         return sb.toString();
     }
 
-    private StringBuilder buf = new StringBuilder();
-    private Formatter formatter = new Formatter(buf);
     private int numErrors, numWarnings;
 }
 
 public
 Parser(Grammar.Node grammar, Reader reader)
 {
+    if (!grammar.isVal) {
+        throw new IllegalArgumentException("Grammar root node should have value");
+    }
     this.grammar = grammar;
     this.reader = reader;
     FindRecursions(grammar, new ArrayDeque<>());
@@ -120,24 +256,26 @@ Parser(Grammar.Node grammar, String str)
     this(grammar, new StringReader(str));
 }
 
-public void/*XXX*/
-Parse(Summary summary) throws IOException
+public Parser
+Parse(Summary summary)
+    throws IOException
 {
     this.summary = summary;
     while (true) {
         int c = reader.read();
         if (c == -1) {
             Finalize();
-            return;
+            return this;
         }
         ProcessChar(c);
     }
 }
 
-public void
-Parse() throws IOException
+public Parser
+Parse()
+    throws IOException
 {
-    Parse(new Summary());
+    return Parse(new Summary());
 }
 
 public Summary
@@ -227,6 +365,34 @@ private class ParserNode {
             this.prev = prev;
             prev.AddRef();
         }
+    }
+
+    /** Find nearest AST node in parents chain. */
+    public Ast.Node
+    FindAstNode()
+    {
+        ParserNode node = this;
+        while (node != null) {
+            if (node.astNode != null) {
+                return node.astNode;
+            }
+            node = node.parent;
+        }
+        return null;
+    }
+
+    /** Find nearest node with named grammar node in parents chain. */
+    public ParserNode
+    FindNamedNode()
+    {
+        ParserNode node = this;
+        while (node != null) {
+            if (node.grammarNode.name != null) {
+                return node;
+            }
+            node = node.parent;
+        }
+        return null;
     }
 }
 
@@ -337,11 +503,58 @@ Finalize()
     /* Check if we have end-of-file node in current branches list. If there are several ones then
      * there is an ambiguity. If there is no end-of-file node then there is incomplete node(s).
      */
+    int numEof = 0;
+    ParserNode eofBranch = null;
+    HashSet<ParserNode> namedNodes = new HashSet<>();
     for (ParserNode branch: curBranches) {
-
+        if (branch.grammarNode == null) {
+            numEof++;
+            eofBranch = branch;
+        } else {
+            namedNodes.add(branch.FindNamedNode());
+        }
     }
-    //XXX
 
+    if (numEof == 0) {
+        if (namedNodes.size() > 1) {
+            summary.Error(curPos, ErrorCode.INCOMPLETE_NODE.ordinal(),
+                          "Incomplete syntax (unterminated elements follow):");
+            for (ParserNode node: namedNodes) {
+                summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE_CANDIDATE.ordinal(),
+                              "Incomplete element candidate: %s",
+                              node.grammarNode.name);
+            }
+        } else {
+            ParserNode node = namedNodes.iterator().next();
+            summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE.ordinal(),
+                          "Incomplete %s", node.grammarNode.name);
+        }
+
+    } else if (numEof > 1) {
+        summary.Error(curPos, ErrorCode.AMBIGUOUS_SYNTAX.ordinal(), "Ambiguous syntax");
+
+    } else {
+        CommitBranch(eofBranch.prev);
+    }
+
+    HashSet<Ast.Node> astNodes = new HashSet<>();
+    for (ParserNode branch: curBranches) {
+        if (branch.grammarNode == null) {
+            if (numEof > 1) {
+                Ast.Node astNode = branch.FindAstNode();
+                if (astNodes.add(astNode)) {
+                    summary.Error(astNode.startPosition,
+                                  ErrorCode.AMBIGUOUS_SYNTAX_CANDIDATE.ordinal(),
+                                  "Ambiguous syntax candidate: %s",
+                                  astNode.Describe());
+                }
+            }
+        }
+        branch.Release();
+    }
+    curBranches.clear();
+
+    /* Commit all uncommitted AST nodes. */
     CommitAstNodes(null);
 }
 
@@ -577,6 +790,9 @@ CommitBranch(ParserNode branch)
         Ast.Node astNode = null, firstAstNode = null;
         boolean astCreated = false;
         while (node != null) {
+            if (node.inputPosition == null) {
+                node.inputPosition = charNode.inputPosition;
+            }
             if (node.astNode == null && node.grammarNode.isVal) {
                 node.astNode = ast.CreateNode();
                 node.astNode.grammarNode = node.grammarNode;
@@ -606,9 +822,11 @@ CommitBranch(ParserNode branch)
         }
     }
 
-    for (ParserNode nextBranch: curBranches) {
-        nextBranch.prev.Release();
-        nextBranch.prev = null;
+    for (ParserNode curBranch: curBranches) {
+        if (curBranch.prev != null) {
+            curBranch.prev.Release();
+            curBranch.prev = null;
+        }
     }
 }
 

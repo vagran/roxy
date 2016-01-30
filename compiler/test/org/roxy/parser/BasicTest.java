@@ -76,8 +76,7 @@ String testFile1 =
 Basic()
     throws IOException
 {
-    Parser parser = new Parser(fileNode, testFile1);
-    parser.Parse();
+    ParserUtil.TestParser(fileNode, testFile1);
 }
 
 @Test public void
@@ -88,8 +87,7 @@ Spaces()
     for (int i = 0; i < 1000; i++) {
         sb.append(' ');
     }
-    Parser parser = new Parser(fileNode, sb.toString());
-    parser.Parse();
+    ParserUtil.TestParser(fileNode, sb.toString());
 }
 
 @Test public void
@@ -105,16 +103,14 @@ InvalidGrammar()
         Compile();
         System.out.print(FindNode("gap"));
     }};
-    Parser parser = new Parser(invGrammar.FindNode("gap"), "some string");
-    AssertThrows(IllegalStateException.class, parser::Parse);
+    ParserUtil.TestParser(invGrammar.FindNode("gap"), "some string", IllegalStateException.class);
 }
 
 @Test public void
 UnclosedStringLiteral()
-    throws IOException
 {
-    Parser parser = new Parser(fileNode, "a = \"some value");
-    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+    ParserUtil.TestParser(fileNode, "a = \"some value",
+                          new ParserUtil.Error(Parser.ErrorCode.INCOMPLETE_NODE.ordinal(), 1, 4));
 }
 
 @Test public void
@@ -125,22 +121,23 @@ Finalization()
         Any(
             Char('a').Quantity(3),
             Char('a').Quantity(5)
-        ).Name("file");
+        ).Name("file").Val();
         Compile();
         System.out.print(FindNode("file"));
     }};
-    Parser parser = new Parser(grammar.FindNode("file"), "aa");
-    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
 
-    new Parser(grammar.FindNode("file"), "aaa").Parse();
+    ParserUtil.TestParser(grammar.FindNode("file"), "aa",
+                          new ParserUtil.Error(Parser.ErrorCode.INCOMPLETE_NODE.ordinal()));
 
-    parser = new Parser(grammar.FindNode("file"), "aaaa");
-    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+    ParserUtil.TestParser(grammar.FindNode("file"), "aaa");
 
-    new Parser(grammar.FindNode("file"), "aaaaa").Parse();
+    ParserUtil.TestParser(grammar.FindNode("file"), "aaaa",
+                          new ParserUtil.Error(Parser.ErrorCode.INCOMPLETE_NODE.ordinal(), 1, 0));
 
-    parser = new Parser(grammar.FindNode("file"), "aaaaaa");
-    AssertThrows(RuntimeException.class, parser::Parse);//XXX change error reporting
+    ParserUtil.TestParser(grammar.FindNode("file"), "aaaaa");
+
+    ParserUtil.TestParser(grammar.FindNode("file"), "aaaaaa",
+                          null, RuntimeException.class);
 }
 
 @Test public void

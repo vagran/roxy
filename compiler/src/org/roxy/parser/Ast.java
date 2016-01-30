@@ -53,6 +53,24 @@ public class Node {
         }
         return false;
     }
+
+    String
+    GetName()
+    {
+        //XXX
+        if (grammarNode.name != null) {
+            return grammarNode.name;
+        } else {
+            return "<unnamed>";
+        }
+    }
+
+    String
+    Describe()
+    {
+        //XXX
+        return grammarNode.toString();
+    }
 }
 
 Node
