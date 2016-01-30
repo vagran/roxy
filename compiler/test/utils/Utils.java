@@ -10,11 +10,6 @@ public interface ThrowingRunnable {
     void run() throws Throwable;
 }
 
-@FunctionalInterface
-public interface ThrowingProvider<T> {
-    T run() throws Throwable;
-}
-
 public static void
 AssertThrows(Class<? extends Throwable> expectedThrowable, ThrowingRunnable runnable)
 {
