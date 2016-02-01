@@ -98,7 +98,7 @@ InvalidGrammar()
         Node("gap").Sequence(
             Any(Char('q').NoneToMany(),
                 Char('w').NoneToMany()),
-            NodeRef("gap").NoneToMany());
+            NodeRef("gap").NoneToMany()).Val();
 
         Compile();
         System.out.print(FindNode("gap"));
@@ -148,7 +148,7 @@ Finalization2()
         Any(
             Char('a').Quantity(3, 5),
             Char('a').Quantity(7)
-        ).Name("file");
+        ).Name("file").Val();
         Compile();
         System.out.print(FindNode("file"));
     }};
