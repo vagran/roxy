@@ -82,12 +82,25 @@ public abstract class Node implements Iterable<Node> {
         return Quantity(0, -1);
     }
 
-    /** Mark the node valuable to have in the parsed AST. */
+    /** Mark the node valuable to have it in the parsed AST.
+     *
+     * @param valTagFabric Fabric for AST node tag creation.
+     * @param wantValString True to save matched string in the AST node.
+     * @return This node.
+     */
     public final Node
-    Val()
+    Val(Ast.TagFabric valTagFabric, boolean wantValString)
     {
         isVal = true;
+        this.valTagFabric = valTagFabric;
+        this.wantValString = wantValString;
         return this;
+    }
+
+    public final Node
+    Val(Ast.TagFabric valTagFabric)
+    {
+        return Val(valTagFabric, false);
     }
 
     @Override public String
@@ -149,7 +162,8 @@ public abstract class Node implements Iterable<Node> {
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     protected String name;
-    boolean isVal, wantString = true/*XXX*/;
+    boolean isVal, wantValString;
+    Ast.TagFabric valTagFabric;
     protected int numMin = 1, numMax = 1;
     protected boolean quantityValid = false;
     /** Next sibling node when in a sequence. */
@@ -241,9 +255,6 @@ public class NodeBuilder {
         }
         this.node = node;
         node.Name(name);
-        if (isVal) {
-            node.Val();
-        }
         return node;
     }
 
@@ -261,7 +272,6 @@ public class NodeBuilder {
 
     private final String name;
     private Node node;
-    private boolean isVal = false;
 }
 
 /** Transformed into sequence with one node. */

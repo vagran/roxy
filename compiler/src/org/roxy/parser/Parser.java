@@ -9,15 +9,17 @@ import java.util.HashSet;
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
 
-public enum ErrorCode {
-    INCOMPLETE_NODE,
-    INCOMPLETE_NODE_CANDIDATE,
-    AMBIGUOUS_SYNTAX,
-    AMBIGUOUS_SYNTAX_CANDIDATE
+public interface ErrorCode {
+    int INCOMPLETE_NODE = 0,
+        INCOMPLETE_NODE_CANDIDATE = 1,
+        AMBIGUOUS_SYNTAX = 2,
+        AMBIGUOUS_SYNTAX_CANDIDATE = 3,
+
+        CUSTOM_START = 1000;
 }
 
-public enum WarnCode {
-
+public interface WarnCode {
+    int CUSTOM_START = 1000;
 }
 
 /** Current position in input text. */
@@ -523,21 +525,21 @@ Finalize()
 
     if (numEof == 0) {
         if (namedNodes.size() > 1) {
-            summary.Error(curPos, ErrorCode.INCOMPLETE_NODE.ordinal(),
+            summary.Error(curPos, ErrorCode.INCOMPLETE_NODE,
                           "Incomplete syntax (unterminated elements follow):");
             for (ParserNode node: namedNodes) {
-                summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE_CANDIDATE.ordinal(),
+                summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE_CANDIDATE,
                               "Incomplete element candidate: %s",
                               node.grammarNode.name);
             }
         } else {
             ParserNode node = namedNodes.iterator().next();
-            summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE.ordinal(),
+            summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE,
                           "Incomplete %s", node.grammarNode.name);
         }
 
     } else if (numEof > 1) {
-        summary.Error(curPos, ErrorCode.AMBIGUOUS_SYNTAX.ordinal(), "Ambiguous syntax");
+        summary.Error(curPos, ErrorCode.AMBIGUOUS_SYNTAX, "Ambiguous syntax");
 
     } else {
         CommitBranch(eofBranch.prev);
@@ -550,7 +552,7 @@ Finalize()
                 Ast.Node astNode = branch.FindAstNode();
                 if (astNodes.add(astNode)) {
                     summary.Error(astNode.startPosition,
-                                  ErrorCode.AMBIGUOUS_SYNTAX_CANDIDATE.ordinal(),
+                                  ErrorCode.AMBIGUOUS_SYNTAX_CANDIDATE,
                                   "Ambiguous syntax candidate: %s",
                                   astNode.Describe());
                 }
@@ -811,7 +813,7 @@ CommitBranch(ParserNode branch)
                 astCreated = false;
             }
             if (node.astNode != null) {
-                if (astNode == null && node.grammarNode.wantString) {
+                if (astNode == null && node.grammarNode.wantValString) {
                     node.astNode.AppendChar(charNode.matchedChar);
                 } else if (astNode != null) {
                     node.astNode.AppendChild(astNode);
@@ -845,7 +847,7 @@ CommitAstNodes(Ast.Node newNode)
 {
     Ast.Node node = lastAstNode;
     while (node != null && (newNode == null || !newNode.IsAncestor(node))) {
-        node.Commit(prevPos);
+        node.Commit(prevPos, summary);
         node = node.parent;
     }
     lastAstNode = newNode;

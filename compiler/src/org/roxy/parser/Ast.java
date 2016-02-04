@@ -5,6 +5,17 @@ import java.util.ArrayList;
 /** Abstract syntax tree. Result of text parsing. */
 public class Ast {
 
+/** Produces tag for a AST node. Invoked when AST node is fully constructed with all its children.
+ * The fabric can modify the node according to its needs, e.g. free unnecessary children nodes or
+ * stored string after processing.
+ */
+@FunctionalInterface
+public interface TagFabric {
+
+    Object
+    Produce(Node node, Parser.Summary summary);
+}
+
 public class Node {
 
     public Grammar.Node grammarNode;
@@ -12,6 +23,7 @@ public class Node {
     public Node parent;
     public ArrayList<Node> children;
     public Parser.InputPosition startPosition, endPosition;
+    public Object tag;
 
     void
     AppendChar(int c)
@@ -34,10 +46,16 @@ public class Node {
 
     /** Called when all characters or sub-nodes added. */
     void
-    Commit(Parser.InputPosition endPosition)
+    Commit(Parser.InputPosition endPosition, Parser.Summary summary)
     {
         assert this.endPosition == null;
         this.endPosition = endPosition;
+        if (grammarNode.valTagFabric != null) {
+            tag = grammarNode.valTagFabric.Produce(this, summary);
+        }
+        if (parent == null) {
+            root = this;
+        }
     }
 
     /** Check if the specified node is ancestor of this node. Returns also true for the same node. */
@@ -58,7 +76,9 @@ public class Node {
     GetName()
     {
         //XXX
-        if (grammarNode.name != null) {
+        if (tag != null) {
+            return tag.toString();
+        } else if (grammarNode.name != null) {
             return grammarNode.name;
         } else {
             return "<unnamed>";
@@ -72,6 +92,8 @@ public class Node {
         return grammarNode.toString();
     }
 }
+
+Node root;
 
 Node
 CreateNode()
