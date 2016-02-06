@@ -18,15 +18,15 @@ public static class Record {
     }
 
     public boolean
-    Match(Parser.Summary.Record rec)
+    Match(Summary.Record rec)
     {
         if (rec.inputPosition == null && line != -1) {
             return false;
         }
-        if (this instanceof Error && rec.type != Parser.Summary.RecordType.ERROR) {
+        if (this instanceof Error && rec.type != Summary.RecordType.ERROR) {
             return false;
         }
-        if (this instanceof Warning && rec.type != Parser.Summary.RecordType.WARNING) {
+        if (this instanceof Warning && rec.type != Summary.RecordType.WARNING) {
             return false;
         }
         return rec.code == code && (rec.inputPosition == null ||
@@ -75,56 +75,63 @@ public static class Warning extends Record {
 }
 
 public static void
-TestParser(Grammar.Node grammar, String file, Class<? extends Throwable> expectedConstructException,
-           Class<? extends Throwable> expectedParseException, Record... expectedRecords)
+VerifySummary(Summary summary, Record... expectedRecords)
 {
-    if (expectedConstructException != null) {
-        AssertThrows(expectedConstructException, () -> new Parser(grammar, file));
-        return;
-    }
-    Parser parser = new Parser(grammar, file);
-    if (expectedParseException != null) {
-        AssertThrows(expectedParseException, parser::Parse);
-        return;
-    }
-    Parser.Summary summary;
-    try {
-        summary = parser.Parse().GetSummary();
-    } catch (Throwable t) {
-        throw new RuntimeException(t);
-    }
-    System.out.println(summary);
-    HashSet<Parser.Summary.Record> matchedRecords = new HashSet<>();
+    HashSet<Summary.Record> matchedRecords = new HashSet<>();
     for (Record rec: expectedRecords) {
-        Parser.Summary.Record _rec = FindRecord(rec, summary);
+        Summary.Record _rec = FindRecord(rec, summary);
         if (_rec == null) {
             throw new AssertionError("Expected record not found: " + rec);
         }
         matchedRecords.add(_rec);
     }
-    for (Parser.Summary.Record rec: summary.records) {
+    for (Summary.Record rec: summary.records) {
         if (!matchedRecords.contains(rec)) {
             throw new AssertionError("Unexpected record: " + rec);
         }
     }
 }
 
-public static void
+public static Parser
+TestParser(Grammar.Node grammar, String file, Class<? extends Throwable> expectedConstructException,
+           Class<? extends Throwable> expectedParseException, Record... expectedRecords)
+{
+    if (expectedConstructException != null) {
+        AssertThrows(expectedConstructException, () -> new Parser(grammar, file));
+        return null;
+    }
+    Parser parser = new Parser(grammar, file);
+    if (expectedParseException != null) {
+        AssertThrows(expectedParseException, parser::Parse);
+        return null;
+    }
+    Summary summary;
+    try {
+        summary = parser.Parse().GetSummary();
+    } catch (Throwable t) {
+        throw new RuntimeException(t);
+    }
+    System.out.println(summary);
+    VerifySummary(summary, expectedRecords);
+    return parser;
+}
+
+public static Parser
 TestParser(Grammar.Node grammar, String file, Class<? extends Throwable> expectedConstructException)
 {
-    TestParser(grammar, file, expectedConstructException, null);
+    return TestParser(grammar, file, expectedConstructException, null);
 }
 
-public static void
+public static Parser
 TestParser(Grammar.Node grammar, String file, Record... expectedRecords)
 {
-    TestParser(grammar, file, null, null, expectedRecords);
+    return TestParser(grammar, file, null, null, expectedRecords);
 }
 
-private static Parser.Summary.Record
-FindRecord(Record rec, Parser.Summary summary)
+private static Summary.Record
+FindRecord(Record rec, Summary summary)
 {
-    for (Parser.Summary.Record _rec: summary.records) {
+    for (Summary.Record _rec: summary.records) {
         if (rec.Match(_rec)) {
             return _rec;
         }

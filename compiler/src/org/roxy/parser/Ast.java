@@ -13,13 +13,16 @@ public class Ast {
 public interface TagFabric {
 
     Object
-    Produce(Node node, Parser.Summary summary);
+    Produce(Node node, Summary summary);
 }
 
 public class Node {
 
     public Grammar.Node grammarNode;
-    public StringBuilder str;
+    /** String content is accumulated here. */
+    public StringBuilder strBuf;
+    /** String content is stored here after commit if requested by grammar node. */
+    public String str;
     public Node parent;
     public ArrayList<Node> children;
     public Parser.InputPosition startPosition, endPosition;
@@ -28,10 +31,10 @@ public class Node {
     void
     AppendChar(int c)
     {
-        if (str == null) {
-            str = new StringBuilder();
+        if (strBuf == null) {
+            strBuf = new StringBuilder();
         }
-        str.append((char)c);
+        strBuf.append((char)c);
     }
 
     void
@@ -46,10 +49,14 @@ public class Node {
 
     /** Called when all characters or sub-nodes added. */
     void
-    Commit(Parser.InputPosition endPosition, Parser.Summary summary)
+    Commit(Parser.InputPosition endPosition, Summary summary)
     {
         assert this.endPosition == null;
         this.endPosition = endPosition;
+        if (grammarNode.wantValString && strBuf != null) {
+            str = strBuf.toString();
+            strBuf = null;
+        }
         if (grammarNode.valTagFabric != null) {
             tag = grammarNode.valTagFabric.Produce(this, summary);
         }
