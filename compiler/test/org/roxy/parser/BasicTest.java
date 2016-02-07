@@ -291,7 +291,8 @@ UnterminatedStatement()
 {
     //XXX
     //make it identify unterminated statement only
-    ParserUtil.TestParser(fileNode, "a = 1");
+    ParserUtil.TestParser(fileNode, "a = 1",
+                          new ParserUtil.Error(Parser.ErrorCode.INCOMPLETE_NODE, 1, 5));
 }
 
 @Test public void
@@ -306,6 +307,13 @@ InvalidNumber()
 {
     ParserUtil.TestParser(fileNode, "a = 9999999999999999999;",
                           new ParserUtil.Error(NodeTag.ErrorCode.INVALID_NUMBER, 1, 4));
+}
+
+@Test public void
+InvalidSyntaxRecovery()
+{
+    ParserUtil.TestParser(fileNode, "a = 1 b = 2;",
+                          new ParserUtil.Error(Parser.ErrorCode.PARSING_FAILED, 1, 6));
 }
 
 @Test public void
@@ -332,7 +340,7 @@ Finalization()
     ParserUtil.TestParser(grammar.FindNode("file"), "aaaaa");
 
     ParserUtil.TestParser(grammar.FindNode("file"), "aaaaaa",
-                          null, RuntimeException.class);
+                          new ParserUtil.Error(Parser.ErrorCode.PARSING_FAILED, 1, 5));
 }
 
 @Test public void
@@ -360,8 +368,8 @@ Finalization2()
 
     ParserUtil.TestParser(grammar.FindNode("file"), "aaaaaaa");
 
-    //XXX change error reporting
-    ParserUtil.TestParser(grammar.FindNode("file"), "aaaaaaaa", null, RuntimeException.class);
+    ParserUtil.TestParser(grammar.FindNode("file"), "aaaaaaaa",
+                          new ParserUtil.Error(Parser.ErrorCode.PARSING_FAILED, 1, 7));
 }
 
 }

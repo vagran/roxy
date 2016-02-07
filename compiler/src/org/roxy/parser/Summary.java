@@ -172,5 +172,17 @@ toString()
     return sb.toString();
 }
 
+public final int
+GetErrorsCount()
+{
+    return numErrors;
+}
+
+public final int
+GetWarningsCount()
+{
+    return numWarnings;
+}
+
 private int numErrors, numWarnings;
 }

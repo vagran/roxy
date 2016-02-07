@@ -11,15 +11,21 @@ public class Parser {
 
 public interface ErrorCode {
     int INCOMPLETE_NODE = 0,
-        INCOMPLETE_NODE_CANDIDATE = 1,
-        AMBIGUOUS_SYNTAX = 2,
-        AMBIGUOUS_SYNTAX_CANDIDATE = 3,
+        AMBIGUOUS_SYNTAX = 1,
+        PARSING_FAILED = 2,
 
         CUSTOM_START = 1000;
 }
 
 public interface WarnCode {
     int CUSTOM_START = 1000;
+}
+
+public interface InfoCode {
+    int INCOMPLETE_NODE_CANDIDATE = 0,
+        AMBIGUOUS_SYNTAX_CANDIDATE = 1,
+
+        CUSTOM_START = 1000;
 }
 
 /** Current position in input text. */
@@ -90,13 +96,18 @@ Parse(Summary summary)
     throws IOException
 {
     this.summary = summary;
-    while (true) {
-        int c = reader.read();
-        if (c == -1) {
-            Finalize();
-            return this;
+    try {
+        while (true) {
+            int c = reader.read();
+            if (c == -1) {
+                Finalize();
+                return this;
+            }
+            ProcessChar(c);
         }
-        ProcessChar(c);
+    } catch (ParseException e) {
+        summary.Error(e.inputPosition, ErrorCode.PARSING_FAILED, e.getMessage());
+        return this;
     }
 }
 
@@ -231,6 +242,18 @@ private class ParserNode {
     }
 }
 
+private class ParseException extends RuntimeException {
+
+    public
+    ParseException(InputPosition inputPosition, String message)
+    {
+        super(message);
+        this.inputPosition = new InputPosition(inputPosition);
+    }
+
+    private InputPosition inputPosition;
+}
+
 private final Grammar.Node grammar;
 private final Reader reader;
 
@@ -355,9 +378,9 @@ Finalize()
             summary.Error(curPos, ErrorCode.INCOMPLETE_NODE,
                           "Incomplete syntax (unterminated elements follow):");
             for (ParserNode node: namedNodes) {
-                summary.Error(node.inputPosition, ErrorCode.INCOMPLETE_NODE_CANDIDATE,
-                              "Incomplete element candidate: %s",
-                              node.grammarNode.name);
+                summary.Info(node.inputPosition, InfoCode.INCOMPLETE_NODE_CANDIDATE,
+                             "Incomplete element candidate: %s",
+                             node.grammarNode.name);
             }
         } else {
             ParserNode node = namedNodes.iterator().next();
@@ -378,10 +401,10 @@ Finalize()
             if (numEof > 1) {
                 Ast.Node astNode = branch.FindAstNode();
                 if (astNodes.add(astNode)) {
-                    summary.Error(astNode.startPosition,
-                                  ErrorCode.AMBIGUOUS_SYNTAX_CANDIDATE,
-                                  "Ambiguous syntax candidate: %s",
-                                  astNode.Describe());
+                    summary.Info(astNode.startPosition,
+                                 InfoCode.AMBIGUOUS_SYNTAX_CANDIDATE,
+                                 "Ambiguous syntax candidate: %s",
+                                 astNode.Describe());
                 }
             }
         }
@@ -408,7 +431,6 @@ ProcessChar(int c)
         node.inputPosition = _curPos;
         numBranchesMatched++;
         matchedBranch = node;
-        //XXX handle lazy matching, remove branches in the same sequence
 
         /* Find candidates for next character matching. */
         FindNextCharNodes(node);
@@ -416,8 +438,7 @@ ProcessChar(int c)
     }
 
     if (numBranchesMatched == 0) {
-        //XXX try to parse the rest, find some candidates in grammar for continuing
-        throw new RuntimeException(String.format("Invalid syntax at %s, '%c'", curPos, c));//XXX temporal
+        throw new ParseException(curPos, "Invalid syntax");
     }
 
     SwapBranches();

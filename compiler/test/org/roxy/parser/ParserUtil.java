@@ -86,6 +86,9 @@ VerifySummary(Summary summary, Record... expectedRecords)
         matchedRecords.add(_rec);
     }
     for (Summary.Record rec: summary.records) {
+        if (rec.type != Summary.RecordType.ERROR && rec.type != Summary.RecordType.WARNING) {
+            continue;
+        }
         if (!matchedRecords.contains(rec)) {
             throw new AssertionError("Unexpected record: " + rec);
         }
