@@ -8,120 +8,6 @@ import java.util.TreeMap;
 
 public class BasicTest {
 
-static class NodeTag {
-    public enum Type {
-        STRING_CHAR,
-        STRING_ESCAPE,
-        STRING_LITERAL,
-        NUM_LITERAL,
-        IDENTIFIER,
-        STATEMENT,
-        FILE
-    }
-
-    public interface ErrorCode {
-        int INVALID_ESCAPE = Parser.ErrorCode.CUSTOM_START,
-            INVALID_NUMBER = Parser.ErrorCode.CUSTOM_START + 1,
-            DUP_IDENTIFIER = Parser.ErrorCode.CUSTOM_START + 2;
-    }
-
-    final Type type;
-    char escapedChar;
-    int intValue;
-
-    @Override public String
-    toString()
-    {
-        return type.toString();
-    }
-
-    public static Ast.TagFabric
-    GetFabric(Type type)
-    {
-        return (Ast.Node node, Summary summary) -> {
-            NodeTag tag = new NodeTag(type);
-            tag.Compile(node, summary);
-            return tag;
-        };
-    }
-
-    private
-    NodeTag(Type type)
-    {
-        this.type = type;
-    }
-
-    private void
-    Compile(Ast.Node node, Summary summary)
-    {
-        switch (type) {
-        case STRING_ESCAPE:
-            CompileEscape(node, summary);
-            break;
-        case STRING_LITERAL:
-            CompileString(node, summary);
-            break;
-        case NUM_LITERAL:
-            CompileNumber(node, summary);
-            break;
-        }
-    }
-
-    private void
-    CompileEscape(Ast.Node node, Summary summary)
-    {
-        switch (node.str.charAt(0)) {
-        case '\\':
-            escapedChar = '\\';
-            break;
-        case '"':
-            escapedChar = '"';
-            break;
-        case 'n':
-            escapedChar = '\n';
-            break;
-        case 'r':
-            escapedChar = '\r';
-            break;
-        case 't':
-            escapedChar = '\t';
-            break;
-        default:
-            summary.Error(node.startPosition, ErrorCode.INVALID_ESCAPE, "Invalid escape character");
-        }
-    }
-
-    private void
-    CompileString(Ast.Node node, Summary summary)
-    {
-        StringBuilder sb = new StringBuilder();
-        for (Ast.Node child: node.children) {
-            NodeTag tag = (NodeTag)child.tag;
-            if (tag.type == Type.STRING_CHAR) {
-                sb.append(child.str);
-            } else if (tag.type == Type.STRING_ESCAPE) {
-                sb.append(tag.escapedChar);
-            } else {
-                throw new IllegalStateException("Invalid child node type: " + tag.type);
-            }
-        }
-        node.str = sb.toString();
-        node.children = null;
-    }
-
-    private void
-    CompileNumber(Ast.Node node, Summary summary)
-    {
-        try {
-            intValue = Integer.parseInt(node.str);
-            node.str = null;
-        } catch (NumberFormatException e) {
-            summary.Error(node.startPosition, ErrorCode.INVALID_NUMBER,
-                          "Invalid number literal: %s", e.getMessage());
-        }
-    }
-}
-
 Map<String, Object>
 Compile(Ast ast, Summary summary)
 {
@@ -130,17 +16,17 @@ Compile(Ast ast, Summary summary)
         assert stmtNode.children.size() == 2;
         Ast.Node identNode = stmtNode.children.get(0);
         Ast.Node valueNode = stmtNode.children.get(1);
-        assert ((NodeTag)identNode.tag).type == NodeTag.Type.IDENTIFIER;
+        assert ((TestNodeTag)identNode.tag).type == TestNodeTag.Type.IDENTIFIER;
         if (result.containsKey(identNode.str)) {
-            summary.Error(identNode.startPosition, NodeTag.ErrorCode.DUP_IDENTIFIER,
+            summary.Error(identNode.startPosition, TestNodeTag.ErrorCode.DUP_IDENTIFIER,
                           "Duplicated identifier: %s", identNode.str);
             continue;
         }
         Object value;
-        NodeTag valueTag = (NodeTag)valueNode.tag;
-        if (valueTag.type == NodeTag.Type.STRING_LITERAL) {
+        TestNodeTag valueTag = (TestNodeTag)valueNode.tag;
+        if (valueTag.type == TestNodeTag.Type.STRING_LITERAL) {
             value = valueNode.str;
-        } else if (valueTag.type == NodeTag.Type.NUM_LITERAL) {
+        } else if (valueTag.type == TestNodeTag.Type.NUM_LITERAL) {
             value = valueTag.intValue;
         } else {
             throw new IllegalStateException("Invalid node in statement: " + valueTag.type);
@@ -169,21 +55,21 @@ Grammar grammar = new Grammar() {{
 
     Node("string-literal").Sequence(
         Char('"'),
-        Any(AnyChar().Exclude("\"\\").Val(NodeTag.GetFabric(NodeTag.Type.STRING_CHAR), true),
+        Any(AnyChar().Exclude("\"\\").Val(TestNodeTag.GetFabric(TestNodeTag.Type.STRING_CHAR), true),
             Sequence(Char('\\'),
-                     AnyChar().Val(NodeTag.GetFabric(NodeTag.Type.STRING_ESCAPE), true))).NoneToMany(),
-        Char('"')).
-        Val(NodeTag.GetFabric(NodeTag.Type.STRING_LITERAL));
+                     AnyChar().Val(TestNodeTag.GetFabric(TestNodeTag.Type.STRING_ESCAPE), true)))
+                     .NoneToMany(),
+        Char('"')).Val(TestNodeTag.GetFabric(TestNodeTag.Type.STRING_LITERAL));
 
     Node("number-literal").Sequence(Char('-').NoneToOne(), NodeRef("decimal-digit").OneToMany()).
-        Val(NodeTag.GetFabric(NodeTag.Type.NUM_LITERAL), true);
+        Val(TestNodeTag.GetFabric(TestNodeTag.Type.NUM_LITERAL), true);
 
     Node("identifier-first-char").Any(NodeRef("alphabetic"), Char('_'));
     Node("identifier-char").Any(NodeRef("identifier-first-char"), NodeRef("decimal-digit"));
     Node("identifier").Sequence(
         NodeRef("identifier-first-char"),
-        NodeRef("identifier-char").NoneToMany()).
-        Val(NodeTag.GetFabric(NodeTag.Type.IDENTIFIER), true);
+        NodeRef("identifier-char").NoneToMany())
+        .Val(TestNodeTag.GetFabric(TestNodeTag.Type.IDENTIFIER), true);
 
     Node("statement").Sequence(
         NodeRef("identifier"),
@@ -194,14 +80,14 @@ Grammar grammar = new Grammar() {{
             NodeRef("string-literal"),
             NodeRef("number-literal")),
         NodeRef("gap").NoneToOne(),
-        Char(';')).Val(NodeTag.GetFabric(NodeTag.Type.STATEMENT));
+        Char(';')).Val(TestNodeTag.GetFabric(TestNodeTag.Type.STATEMENT));
 
     Node("file").Sequence(
         NodeRef("gap").NoneToOne(),
         Sequence(
             NodeRef("statement"),
             NodeRef("gap").NoneToOne()
-        ).NoneToMany()).Val(NodeTag.GetFabric(NodeTag.Type.FILE));
+        ).NoneToMany()).Val(TestNodeTag.GetFabric(TestNodeTag.Type.FILE));
 
     //System.out.print(FindNode("file"));
     Compile();
@@ -245,7 +131,6 @@ VerifyResult(Map<String, Object> result, Map<String, Object> expected)
 
 @Test public void
 Basic()
-    throws IOException
 {
     Parser parser = ParserUtil.TestParser(fileNode, testFile1);
     Map<String, Object> result = Compile(parser.GetResult(), parser.GetSummary());
@@ -254,13 +139,18 @@ Basic()
 
 @Test public void
 Spaces()
-    throws IOException
 {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < 1000; i++) {
         sb.append(' ');
     }
     ParserUtil.TestParser(fileNode, sb.toString());
+}
+
+@Test public void
+Empty()
+{
+    ParserUtil.TestParser(fileNode, "");
 }
 
 @Test public void
@@ -299,14 +189,14 @@ UnterminatedStatement()
 InvalidEscape()
 {
     ParserUtil.TestParser(fileNode, "a = \"some \\w value\";",
-                          new ParserUtil.Error(NodeTag.ErrorCode.INVALID_ESCAPE, 1, 11));
+                          new ParserUtil.Error(TestNodeTag.ErrorCode.INVALID_ESCAPE, 1, 11));
 }
 
 @Test public void
 InvalidNumber()
 {
     ParserUtil.TestParser(fileNode, "a = 9999999999999999999;",
-                          new ParserUtil.Error(NodeTag.ErrorCode.INVALID_NUMBER, 1, 4));
+                          new ParserUtil.Error(TestNodeTag.ErrorCode.INVALID_NUMBER, 1, 4));
 }
 
 @Test public void
@@ -355,6 +245,9 @@ Finalization2()
         Compile();
         System.out.print(FindNode("file"));
     }};
+
+    ParserUtil.TestParser(grammar.FindNode("file"), "",
+                          new ParserUtil.Error(Parser.ErrorCode.INCOMPLETE_NODE));
 
     ParserUtil.TestParser(grammar.FindNode("file"), "aa",
                           new ParserUtil.Error(Parser.ErrorCode.INCOMPLETE_NODE));

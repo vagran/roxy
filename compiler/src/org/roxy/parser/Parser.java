@@ -17,6 +17,7 @@ public interface ErrorCode {
         CUSTOM_START = 1000;
 }
 
+//XXX do not need warnings, only errors
 public interface WarnCode {
     int CUSTOM_START = 1000;
 }
@@ -295,7 +296,10 @@ FreeNode(ParserNode node)
 private void
 InitializeState()
 {
-    CreateBranches(AllocateNode(grammar), null, branchesStack);
+    if (CreateBranches(AllocateNode(grammar), null, branchesStack)) {
+        /* Create also EOF node if allowed. */
+        nextBranches.add(new ParserNode(null));
+    }
     SwapBranches();
 }
 

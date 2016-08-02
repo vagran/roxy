@@ -5,6 +5,11 @@ import java.util.ArrayList;
 /** Abstract syntax tree. Result of text parsing. */
 public class Ast {
 
+/** Tag attached to AST nodes. */
+public interface Tag {
+
+}
+
 /** Produces tag for a AST node. Invoked when AST node is fully constructed with all its children.
  * The fabric can modify the node according to its needs, e.g. free unnecessary children nodes or
  * stored string after processing.
@@ -12,7 +17,7 @@ public class Ast {
 @FunctionalInterface
 public interface TagFabric {
 
-    Object
+    Tag
     Produce(Node node, Summary summary);
 }
 
@@ -26,7 +31,7 @@ public class Node {
     public Node parent;
     public ArrayList<Node> children;
     public Parser.InputPosition startPosition, endPosition;
-    public Object tag;
+    public Tag tag;
 
     void
     AppendChar(int c)
