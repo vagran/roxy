@@ -623,7 +623,7 @@ Compile()
     }
 }
 
-/** Get node bye name. */
+/** Get node by name. */
 public Node
 FindNode(String name)
 {
