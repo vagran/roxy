@@ -2,6 +2,7 @@ package org.roxy.parser;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
@@ -42,7 +43,7 @@ public static class InputPosition {
         curCol = ip.curCol;
     }
 
-    public void
+    public InputPosition
     FeedChar(int c)
     {
         curOffset++;
@@ -53,6 +54,7 @@ public static class InputPosition {
             curCol++;
         }
         wasCr = c == '\r';
+        return this;
     }
 
     @Override public String
@@ -131,11 +133,11 @@ GetResult()
 
 private class ParserNode {
     /** Parent node in stack/tree. Next free node when in free list. */
-    public ParserNode parent;
-    /** Previous character node. Used for character nodes only. */
+    public final ArrayList<ParserNode> parents = new ArrayList<>();
+    /** XXX */
     public ParserNode prev;
     /** Number of references from both next character nodes (which reference this node via "prev"
-     * member) and child nodes (via "parent" member).
+     * member) and child nodes (via "parents" member).
      */
     public int refCount;
     /** Corresponding grammar node. Null for end-of-file node. */
@@ -160,7 +162,7 @@ private class ParserNode {
     public void
     Initialize(Grammar.Node grammarNode)
     {
-        parent = null;
+        parents.clear();
         prev = null;
         this.grammarNode = grammarNode;
         astNode = null;
@@ -180,8 +182,8 @@ private class ParserNode {
         assert refCount > 0;
         refCount--;
         if (refCount == 0) {
-            if (parent != null) {
-                parent.Release();
+            for (ParserNode node: parents) {
+                node.Release();
             }
             if (prev != null) {
                 prev.Release();
@@ -191,13 +193,10 @@ private class ParserNode {
     }
 
     public void
-    SetParent(ParserNode parent)
+    AddParent(ParserNode parent)
     {
-        assert this.parent == null;
-        if (parent != null) {
-            this.parent = parent;
-            parent.AddRef();
-        }
+        parents.add(parent);
+        parent.AddRef();
     }
 
     public void
@@ -208,34 +207,6 @@ private class ParserNode {
             this.prev = prev;
             prev.AddRef();
         }
-    }
-
-    /** Find nearest AST node in parents chain. */
-    public Ast.Node
-    FindAstNode()
-    {
-        ParserNode node = this;
-        while (node != null) {
-            if (node.astNode != null) {
-                return node.astNode;
-            }
-            node = node.parent;
-        }
-        return null;
-    }
-
-    /** Find nearest node with named grammar node in parents chain. */
-    public ParserNode
-    FindNamedNode()
-    {
-        ParserNode node = this;
-        while (node != null) {
-            if (node.grammarNode.name != null) {
-                return node;
-            }
-            node = node.parent;
-        }
-        return null;
     }
 }
 
@@ -251,7 +222,9 @@ private class ParseException extends RuntimeException {
     private InputPosition inputPosition;
 }
 
+/** Grammar tree root. */
 private final Grammar.Node grammar;
+/** Input characters stream provider. */
 private final Reader reader;
 
 /** Free nodes pool. */
@@ -259,13 +232,14 @@ private ParserNode freeNodes;
 private InputPosition curPos = new InputPosition();
 private Ast ast = new Ast();
 private Summary summary;
+private ParserNode lastNode;
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
 {
     if (freeNodes != null) {
         ParserNode node = freeNodes;
-        freeNodes = node.parent;
+        freeNodes = node.prev;
         node.Initialize(grammarNode);
         return node;
     }
@@ -276,7 +250,7 @@ private void
 FreeNode(ParserNode node)
 {
     assert node.refCount == 0;
-    node.parent = freeNodes;
+    node.prev = freeNodes;
     freeNodes = node;
 }
 
@@ -291,6 +265,7 @@ InitializeState()
 private void
 Finalize()
 {
+    FindNextNode(0);
     //XXX
 }
 
@@ -298,7 +273,32 @@ private void
 ProcessChar(int c)
 {
     //XXX
-    curPos.FeedChar(c);
+
+
+    FindNextNode(c);
+
+    curPos = new InputPosition(curPos).FeedChar(c);
+}
+
+/** Find next node to match new input character. Result stored in lastNode.
+ *
+ * @param c New input character, zero for end of file.
+ */
+private void
+FindNextNode(int c)
+{
+    if (lastNode != null) {
+        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numRepeated);
+        if (qs == Grammar.QuantityStatus.MAX_REACHED) {
+            //get next
+        } else if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
+            //must match
+        } else if (qs == Grammar.QuantityStatus.ENOUGH) {
+            //try this and next
+        }
+    } else {
+        // search from root
+    }
 }
 
 }
