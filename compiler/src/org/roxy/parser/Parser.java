@@ -2,7 +2,6 @@ package org.roxy.parser;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
@@ -133,7 +132,7 @@ GetResult()
 
 private class ParserNode {
     /** Parent node in stack/tree. Next free node when in free list. */
-    public final ArrayList<ParserNode> parents = new ArrayList<>();
+    public ParserNode parents;
     /** XXX */
     public ParserNode prev;
     /** Number of references from both next character nodes (which reference this node via "prev"
@@ -162,7 +161,7 @@ private class ParserNode {
     public void
     Initialize(Grammar.Node grammarNode)
     {
-        parents.clear();
+        parents = null;
         prev = null;
         this.grammarNode = grammarNode;
         astNode = null;
@@ -182,8 +181,8 @@ private class ParserNode {
         assert refCount > 0;
         refCount--;
         if (refCount == 0) {
-            for (ParserNode node: parents) {
-                node.Release();
+            if (parents != null) {
+                parents.Release();
             }
             if (prev != null) {
                 prev.Release();
@@ -195,7 +194,11 @@ private class ParserNode {
     public void
     AddParent(ParserNode parent)
     {
-        parents.add(parent);
+        if (parents != null) {
+            parent.prev = parents;
+            parents.AddRef();
+        }
+        parents = parent;
         parent.AddRef();
     }
 
