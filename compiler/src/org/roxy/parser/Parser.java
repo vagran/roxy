@@ -236,6 +236,10 @@ private InputPosition curPos = new InputPosition();
 private Ast ast = new Ast();
 private Summary summary;
 private ParserNode lastNode;
+/** Current correspondence of grammar nodes to parser nodes. Indexed by grammar nodes indices.
+ * Element can be null if no mapping currently exists.
+ */
+private ParserNode[] grammarMap;
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -262,6 +266,7 @@ private void
 InitializeState()
 {
     //XXX
+    grammarMap = new ParserNode[grammar.GetGrammar().GetNodesCount()];
 }
 
 /** Called when input text is fully processed. */
