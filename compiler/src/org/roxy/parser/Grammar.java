@@ -82,6 +82,20 @@ public abstract class Node implements Iterable<Node> {
         return Quantity(0, -1);
     }
 
+    /** Specify node precedence. It is accounted in recursively defined grammar.
+     *
+     * @param precedenceGroup Object which identifies the group this precedence is defined in.
+     * @param precedence Precedence value. Higher values mean higher precedence.
+     * @return This node.
+     */
+    public final Node
+    Precedence(Object precedenceGroup, Comparable<?> precedence)
+    {
+        this.precedenceGroup = precedenceGroup;
+        this.precedence = precedence;
+        return this;
+    }
+
     /** Mark the node valuable to have it in the parsed AST.
      *
      * @param valTagFabric Fabric for AST node tag creation.
@@ -168,6 +182,8 @@ public abstract class Node implements Iterable<Node> {
     protected boolean quantityValid = false;
     /** Next sibling node when in a sequence. */
     protected Node next;
+    protected Object precedenceGroup;
+    protected Comparable<?> precedence;
 
     protected Node
     CopyTo(Node node)
