@@ -173,8 +173,17 @@ public abstract class Node implements Iterable<Node> {
         return next;
     }
 
+    /** Get associated grammar. */
+    public Grammar
+    GetGrammar()
+    {
+        return Grammar.this;
+    }
+
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
+    /** Assigned sequential index, initialized during grammar compiling. */
+    int idx;
     protected String name;
     boolean isVal, wantValString;
     Ast.TagFabric valTagFabric;
@@ -198,7 +207,9 @@ public abstract class Node implements Iterable<Node> {
     protected Node
     Compile(HashSet<Node> visitedNodes)
     {
-        visitedNodes.add(this);
+        if (visitedNodes.add(this)) {
+            AssignIndex();
+        }
         return this;
     }
 
@@ -252,6 +263,13 @@ public abstract class Node implements Iterable<Node> {
                 }
             }
         };
+    }
+
+    void
+    AssignIndex()
+    {
+        idx = nextNodeIdx;
+        nextNodeIdx++;
     }
 }
 
@@ -322,6 +340,7 @@ public class NodeRef extends Node {
             return compiledNode;
         }
         visitedNodes.add(this);
+        AssignIndex();
         compiledNode = new SequenceNode(new Node[]{null});
         CopyTo(compiledNode);
         compiledNode.nodes[0] = Resolve().Compile(visitedNodes);
@@ -486,6 +505,7 @@ public class GroupNode extends Node {
         if (!visitedNodes.add(this)) {
             return this;
         }
+        AssignIndex();
         Node prev = null;
         for (int i = 0; i < nodes.length; i++) {
             Node node = nodes[i];
@@ -639,6 +659,13 @@ Compile()
     }
 }
 
+/** Get number of compiled nodes. */
+public int
+GetNodesCount()
+{
+    return nextNodeIdx;
+}
+
 /** Get node by name. */
 public Node
 FindNode(String name)
@@ -646,6 +673,9 @@ FindNode(String name)
     return nodesIndex.get(name);
 }
 
+/** Nodes indexed by name. */
 private final TreeMap<String, Node> nodesIndex = new TreeMap<>();
+/** Next index to assign to node during compilation. */
+private int nextNodeIdx;
 
 }
