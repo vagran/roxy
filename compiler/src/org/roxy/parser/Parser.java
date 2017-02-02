@@ -2,6 +2,7 @@ package org.roxy.parser;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 
 /** Parses the text into AST using the provided grammar. */
 public class Parser {
@@ -36,6 +37,14 @@ public static class InputPosition {
 
     public
     InputPosition(InputPosition ip)
+    {
+        curOffset = ip.curOffset;
+        curLine = ip.curLine;
+        curCol = ip.curCol;
+    }
+
+    public void
+    Set(InputPosition ip)
     {
         curOffset = ip.curOffset;
         curLine = ip.curLine;
@@ -132,7 +141,7 @@ GetResult()
 
 private class ParserNode {
     /** Parent node in stack/tree. Next free node when in free list. */
-    public ParserNode parents;
+    public final ArrayList<ParserNode> parents = new ArrayList<>();
     /** XXX */
     public ParserNode prev;
     /** Number of references from both next character nodes (which reference this node via "prev"
@@ -148,9 +157,10 @@ private class ParserNode {
      */
     public int numRepeated;
     /** Character matched. */
-    public int matchedChar = -1;
-    /** Input position for matched character. */
-    public InputPosition inputPosition = null;
+    /** Input position for first matched character. */
+    public InputPosition startPosition = new InputPosition(),
+    /** Input position after last matched character. */
+                         endPos = null;
 
     public
     ParserNode(Grammar.Node grammarNode)
@@ -161,7 +171,7 @@ private class ParserNode {
     public void
     Initialize(Grammar.Node grammarNode)
     {
-        parents = null;
+        parents.clear();
         prev = null;
         this.grammarNode = grammarNode;
         astNode = null;
@@ -181,8 +191,8 @@ private class ParserNode {
         assert refCount > 0;
         refCount--;
         if (refCount == 0) {
-            if (parents != null) {
-                parents.Release();
+            for (ParserNode parent: parents) {
+                parent.Release();
             }
             if (prev != null) {
                 prev.Release();
@@ -194,12 +204,8 @@ private class ParserNode {
     public void
     AddParent(ParserNode parent)
     {
-        if (parents != null) {
-            parent.prev = parents;
-            parents.AddRef();
-        }
-        parents = parent;
         parent.AddRef();
+        parents.add(parent);
     }
 
     public void
