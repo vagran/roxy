@@ -141,37 +141,35 @@ GetResult()
 
 private class ParserNode {
     /** Parent node in stack/tree. Next free node when in free list. */
-    public final ArrayList<ParserNode> parents = new ArrayList<>();
+    ParserNode parent;
     /** XXX */
-    public ParserNode prev;
+    ParserNode prev;
     /** Number of references from both next character nodes (which reference this node via "prev"
      * member) and child nodes (via "parents" member).
      */
-    public int refCount;
+    int refCount;
     /** Corresponding grammar node. Null for end-of-file node. */
-    public Grammar.Node grammarNode;
+    Grammar.Node grammarNode;
     /** Assigned AST node if committed and valuable. */
-    public Ast.Node astNode;
+    Ast.Node astNode;
     /** Number the corresponding grammar node has been repeated before this node (number of spent
      * quantification points so far).
      */
-    public int numRepeated;
-    /** Character matched. */
+    int numRepeated;
     /** Input position for first matched character. */
     public InputPosition startPosition = new InputPosition(),
     /** Input position after last matched character. */
                          endPos = null;
 
-    public
     ParserNode(Grammar.Node grammarNode)
     {
         Initialize(grammarNode);
     }
 
-    public void
+    void
     Initialize(Grammar.Node grammarNode)
     {
-        parents.clear();
+        parent = null;
         prev = null;
         this.grammarNode = grammarNode;
         astNode = null;
@@ -179,19 +177,19 @@ private class ParserNode {
         refCount = 1;
     }
 
-    public void
+    void
     AddRef()
     {
         refCount++;
     }
 
-    public void
+    void
     Release()
     {
         assert refCount > 0;
         refCount--;
         if (refCount == 0) {
-            for (ParserNode parent: parents) {
+            if (parent != null) {
                 parent.Release();
             }
             if (prev != null) {
@@ -201,14 +199,15 @@ private class ParserNode {
         }
     }
 
-    public void
-    AddParent(ParserNode parent)
+    void
+    SetParent(ParserNode parent)
     {
+        assert this.parent == null;
         parent.AddRef();
-        parents.add(parent);
+        this.parent = parent;
     }
 
-    public void
+    void
     SetPrev(ParserNode prev)
     {
         assert this.prev == null;
@@ -241,11 +240,8 @@ private ParserNode freeNodes;
 private InputPosition curPos = new InputPosition();
 private Ast ast = new Ast();
 private Summary summary;
-private ParserNode lastNode;
-/** Current correspondence of grammar nodes to parser nodes. Indexed by grammar nodes indices.
- * Element can be null if no mapping currently exists.
- */
-private ParserNode[] grammarMap;
+/** Current terminal nodes in different contexts. */
+private final ArrayList<ParserNode> curTerm = new ArrayList<>();
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -267,12 +263,11 @@ FreeNode(ParserNode node)
     freeNodes = node;
 }
 
-/** Prepare parser for the first character processing. Creates initial parsing branches. */
+/** Prepare parser for the first character processing. */
 private void
 InitializeState()
 {
     //XXX
-    grammarMap = new ParserNode[grammar.GetGrammar().GetNodesCount()];
 }
 
 /** Called when input text is fully processed. */
@@ -301,18 +296,32 @@ ProcessChar(int c)
 private void
 FindNextNode(int c)
 {
-    if (lastNode != null) {
-        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numRepeated);
-        if (qs == Grammar.QuantityStatus.MAX_REACHED) {
-            //get next
-        } else if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
-            //must match
-        } else if (qs == Grammar.QuantityStatus.ENOUGH) {
-            //try this and next
-        }
-    } else {
-        // search from root
-    }
+//    if (lastNode != null) {
+//        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numRepeated);
+//        if (qs == Grammar.QuantityStatus.MAX_REACHED) {
+//            //get next
+//        } else if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
+//            //must match
+//        } else if (qs == Grammar.QuantityStatus.ENOUGH) {
+//            //try this and next
+//        }
+//    } else {
+//        // search from root
+//        ParserNode root = new ParserNode(grammar);
+//        FindNodeDescending(c, root);
+//        root.Release();
+//    }
+}
+
+/** Find candidate node by descending on nodes tree.
+ *
+ * @param c Character to match.
+ * @param start Node to start descending from.
+ */
+private void
+FindNodeDescending(int c, ParserNode start)
+{
+
 }
 
 }

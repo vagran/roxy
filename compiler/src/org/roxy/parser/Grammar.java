@@ -182,8 +182,6 @@ public abstract class Node implements Iterable<Node> {
 
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
-    /** Assigned sequential index, initialized during grammar compiling. */
-    int idx;
     protected String name;
     boolean isVal, wantValString;
     Ast.TagFabric valTagFabric;
@@ -207,9 +205,7 @@ public abstract class Node implements Iterable<Node> {
     protected Node
     Compile(HashSet<Node> visitedNodes)
     {
-        if (visitedNodes.add(this)) {
-            AssignIndex();
-        }
+        visitedNodes.add(this);
         return this;
     }
 
@@ -263,13 +259,6 @@ public abstract class Node implements Iterable<Node> {
                 }
             }
         };
-    }
-
-    void
-    AssignIndex()
-    {
-        idx = nextNodeIdx;
-        nextNodeIdx++;
     }
 }
 
@@ -340,7 +329,6 @@ public class NodeRef extends Node {
             return compiledNode;
         }
         visitedNodes.add(this);
-        AssignIndex();
         compiledNode = new SequenceNode(new Node[]{null});
         CopyTo(compiledNode);
         compiledNode.nodes[0] = Resolve().Compile(visitedNodes);
@@ -431,6 +419,25 @@ public class CharNode extends Node {
         return match;
     }
 
+    /**
+     * @return Character code if this is single character node, zero if it is not.
+     */
+    public int
+    IsSingleChar()
+    {
+        if (matchAny) {
+            return 0;
+        }
+        if (ranges.size() != 1) {
+            return 0;
+        }
+        RangeEntry re = ranges.get(0);
+        if (re.cMin != re.cMax) {
+            return 0;
+        }
+        return re.cMin;
+    }
+
     // /////////////////////////////////////////////////////////////////////////////////////////////
 
     private class RangeEntry {
@@ -480,6 +487,21 @@ public class CharNode extends Node {
         return String.format("%s`%s`: %s%s", indent, name == null ? "" : name, sb.toString(),
                              GetQuantityString());
     }
+
+    @Override protected Node
+    Compile(HashSet<Node> visitedNodes)
+    {
+        visitedNodes.add(this);
+        int c = IsSingleChar();
+        if (c == 0) {
+            return this;
+        }
+        if (singleCharNodes.containsKey(c)) {
+            return singleCharNodes.get(c);
+        }
+        singleCharNodes.put(c, this);
+        return this;
+    }
 }
 
 public class GroupNode extends Node {
@@ -505,7 +527,6 @@ public class GroupNode extends Node {
         if (!visitedNodes.add(this)) {
             return this;
         }
-        AssignIndex();
         Node prev = null;
         for (int i = 0; i < nodes.length; i++) {
             Node node = nodes[i];
@@ -659,13 +680,6 @@ Compile()
     }
 }
 
-/** Get number of compiled nodes. */
-public int
-GetNodesCount()
-{
-    return nextNodeIdx;
-}
-
 /** Get node by name. */
 public Node
 FindNode(String name)
@@ -675,7 +689,7 @@ FindNode(String name)
 
 /** Nodes indexed by name. */
 private final TreeMap<String, Node> nodesIndex = new TreeMap<>();
-/** Next index to assign to node during compilation. */
-private int nextNodeIdx;
+/** Single character nodes. */
+private TreeMap<Integer, Node> singleCharNodes = new TreeMap<>();
 
 }
