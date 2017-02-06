@@ -157,9 +157,13 @@ private class ParserNode {
      */
     int numRepeated;
     /** Input position for first matched character. */
-    public InputPosition startPosition = new InputPosition(),
+    InputPosition startPosition = new InputPosition(),
     /** Input position after last matched character. */
-                         endPos = null;
+                  endPos = null;
+    /** Node generation assigned when node created. Current generation incremented with each new
+     * input character.
+     */
+    int generation;
 
     ParserNode(Grammar.Node grammarNode)
     {
