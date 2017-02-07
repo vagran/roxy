@@ -678,6 +678,7 @@ Compile()
             kv.setValue(compiledNode);
         }
     }
+    singleCharNodes = null;
 }
 
 /** Get node by name. */

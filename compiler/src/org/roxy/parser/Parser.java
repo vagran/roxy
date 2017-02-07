@@ -139,7 +139,7 @@ GetResult()
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////
 
-private class ParserNode {
+private class ParserNode implements AutoCloseable {
     /** Parent node in stack/tree. Next free node when in free list. */
     ParserNode parent;
     /** XXX */
@@ -153,9 +153,10 @@ private class ParserNode {
     /** Assigned AST node if committed and valuable. */
     Ast.Node astNode;
     /** Number the corresponding grammar node has been repeated before this node (number of spent
-     * quantification points so far).
+     * quantification points so far). For character node this is number of characters matched so
+     * far.
      */
-    int numRepeated;
+    int numMatched;
     /** Input position for first matched character. */
     InputPosition startPosition = new InputPosition(),
     /** Input position after last matched character. */
@@ -177,8 +178,9 @@ private class ParserNode {
         prev = null;
         this.grammarNode = grammarNode;
         astNode = null;
-        numRepeated = 0;
+        numMatched = 0;
         refCount = 1;
+        generation = curPos.curOffset;
     }
 
     void
@@ -219,6 +221,12 @@ private class ParserNode {
             this.prev = prev;
             prev.AddRef();
         }
+    }
+
+    @Override public
+    void close()
+    {
+        Release();
     }
 }
 
@@ -301,7 +309,7 @@ private void
 FindNextNode(int c)
 {
 //    if (lastNode != null) {
-//        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numRepeated);
+//        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numMatched);
 //        if (qs == Grammar.QuantityStatus.MAX_REACHED) {
 //            //get next
 //        } else if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
@@ -317,15 +325,37 @@ FindNextNode(int c)
 //    }
 }
 
-/** Find candidate node by descending on nodes tree.
+/** Find candidate node by descending on nodes tree. curTerm is populated with matched nodes.
  *
- * @param c Character to match.
- * @param start Node to start descending from.
+ * @param c Character to match. Cannot be zero (EOF should be checked before this call).
+ * @param node Node to start descending from.
+ * @return True if next sibling node also should be checked.
  */
-private void
-FindNodeDescending(int c, ParserNode start)
+private boolean
+FindNodeDescending(int c, ParserNode node)
 {
+    if (node.grammarNode instanceof Grammar.CharNode) {
+        if (((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
+            node.AddRef();
+            node.numMatched++;
+            curTerm.add(node);
+            return false;
+        }
+        return node.numMatched >= node.grammarNode.GetMinQuantity();
+    }
 
+    if (node.grammarNode instanceof Grammar.SequenceNode) {
+        Grammar.SequenceNode sn = (Grammar.SequenceNode)node.grammarNode;
+
+        for (int i = 0; i < sn.nodes.length; i++) {
+            try (ParserNode child = AllocateNode(sn.nodes[i])) {
+                if (!FindNodeDescending(c, child)) {
+                    return false;
+                }
+            }
+        }
+
+    }
 }
 
 }
