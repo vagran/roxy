@@ -308,7 +308,7 @@ ProcessChar(int c)
 private void
 FindNextNode(int c)
 {
-//    if (lastNode != null) {
+    if (!curTerm.isEmpty()) {
 //        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numMatched);
 //        if (qs == Grammar.QuantityStatus.MAX_REACHED) {
 //            //get next
@@ -317,12 +317,12 @@ FindNextNode(int c)
 //        } else if (qs == Grammar.QuantityStatus.ENOUGH) {
 //            //try this and next
 //        }
-//    } else {
-//        // search from root
-//        ParserNode root = new ParserNode(grammar);
-//        FindNodeDescending(c, root);
-//        root.Release();
-//    }
+    } else {
+        // search from root
+        ParserNode root = new ParserNode(grammar);
+        FindNodeDescending(c, root);
+        root.Release();
+    }
 }
 
 /** Find candidate node by descending on nodes tree. curTerm is populated with matched nodes.
@@ -350,12 +350,28 @@ FindNodeDescending(int c, ParserNode node)
         for (int i = 0; i < sn.nodes.length; i++) {
             try (ParserNode child = AllocateNode(sn.nodes[i])) {
                 if (!FindNodeDescending(c, child)) {
-                    return false;
+                    return node.numMatched >= node.grammarNode.GetMinQuantity();
                 }
             }
         }
-
+        /* None of children matched, and next allowed. */
+        return true;
     }
+
+    if (node.grammarNode instanceof Grammar.VariantsNode) {
+        Grammar.VariantsNode vn = (Grammar.VariantsNode)node.grammarNode;
+        boolean nextWanted = false;
+        for (int i = 0; i < vn.nodes.length; i++) {
+            try (ParserNode child = AllocateNode(vn.nodes[i])) {
+                if (FindNodeDescending(c, child)) {
+                    nextWanted = true;
+                }
+            }
+        }
+        return nextWanted || node.numMatched >= node.grammarNode.GetMinQuantity();
+    }
+
+    throw new IllegalStateException("Invalid node type");
 }
 
 }
