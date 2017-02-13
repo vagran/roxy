@@ -253,7 +253,9 @@ private InputPosition curPos = new InputPosition();
 private Ast ast = new Ast();
 private Summary summary;
 /** Current terminal nodes in different contexts. */
-private final ArrayList<ParserNode> curTerm = new ArrayList<>();
+private ArrayList<ParserNode> curTerm = new ArrayList<>(),
+/** Previous list instance for curTerm. Used to swap with curTerm and save some GC. */
+                              prevTerm = new ArrayList<>();
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode)
@@ -308,26 +310,48 @@ ProcessChar(int c)
 private void
 FindNextNode(int c)
 {
+    ArrayList<ParserNode> swp = prevTerm;
+    prevTerm = curTerm;
+    curTerm = swp;
+
     if (!curTerm.isEmpty()) {
-//        Grammar.QuantityStatus qs = lastNode.grammarNode.CheckQuantity(lastNode.numMatched);
-//        if (qs == Grammar.QuantityStatus.MAX_REACHED) {
-//            //get next
-//        } else if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
-//            //must match
-//        } else if (qs == Grammar.QuantityStatus.ENOUGH) {
-//            //try this and next
-//        }
+        for (ParserNode node: prevTerm) {
+            //XXX EOF handling
+            Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(node.numMatched);
+            if (qs == Grammar.QuantityStatus.MAX_REACHED) {
+                //XXX node closed
+            } else {
+                //XXX
+                if (FindNodeDescending(c, node)) {
+                    FindNodeSibling(c, node);
+                }
+            }
+        }
     } else {
         // search from root
         ParserNode root = new ParserNode(grammar);
         FindNodeDescending(c, root);
         root.Release();
     }
+    prevTerm.clear();
+}
+
+/** Find candidate node by checking next sibling node from the specified one.
+ *
+ * @param c Character to match. XXX EOF allowed?
+ * @param node Node to start siblings finding.
+ * @return True if reached end of grammar.
+ */
+private boolean
+FindNodeSibling(int c, ParserNode node)
+{
+    //XXX
+    return false;
 }
 
 /** Find candidate node by descending on nodes tree. curTerm is populated with matched nodes.
  *
- * @param c Character to match. Cannot be zero (EOF should be checked before this call).
+ * @param c Character to match. Cannot be zero (EOF should be checked before this call).XXX
  * @param node Node to start descending from.
  * @return True if next sibling node also should be checked.
  */
