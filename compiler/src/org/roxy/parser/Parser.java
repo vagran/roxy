@@ -166,15 +166,18 @@ private class ParserNode implements AutoCloseable {
      */
     int generation;
 
-    ParserNode(Grammar.Node grammarNode)
+    ParserNode(Grammar.Node grammarNode, ParserNode parent)
     {
-        Initialize(grammarNode);
+        Initialize(grammarNode, parent);
     }
 
     void
-    Initialize(Grammar.Node grammarNode)
+    Initialize(Grammar.Node grammarNode, ParserNode parent)
     {
-        parent = null;
+        this.parent = parent;
+        if (parent != null) {
+            parent.AddRef();
+        }
         prev = null;
         this.grammarNode = grammarNode;
         astNode = null;
@@ -203,14 +206,6 @@ private class ParserNode implements AutoCloseable {
             }
             FreeNode(this);
         }
-    }
-
-    void
-    SetParent(ParserNode parent)
-    {
-        assert this.parent == null;
-        parent.AddRef();
-        this.parent = parent;
     }
 
     void
@@ -258,15 +253,15 @@ private ArrayList<ParserNode> curTerm = new ArrayList<>(),
                               prevTerm = new ArrayList<>();
 
 private ParserNode
-AllocateNode(Grammar.Node grammarNode)
+AllocateNode(Grammar.Node grammarNode, ParserNode parent)
 {
     if (freeNodes != null) {
         ParserNode node = freeNodes;
         freeNodes = node.prev;
-        node.Initialize(grammarNode);
+        node.Initialize(grammarNode, parent);
         return node;
     }
-    return new ParserNode(grammarNode);
+    return new ParserNode(grammarNode, parent);
 }
 
 private void
@@ -314,44 +309,82 @@ FindNextNode(int c)
     prevTerm = curTerm;
     curTerm = swp;
 
-    if (!curTerm.isEmpty()) {
+    if (!prevTerm.isEmpty()) {
+        ParserNode eofNode = null;
         for (ParserNode node: prevTerm) {
-            //XXX EOF handling
             Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(node.numMatched);
+            boolean eofExpected = false;
             if (qs == Grammar.QuantityStatus.MAX_REACHED) {
-                //XXX node closed
+                eofExpected = FindNodeSibling(c, node);
             } else {
-                //XXX
                 if (FindNodeDescending(c, node)) {
-                    FindNodeSibling(c, node);
+                    eofExpected = FindNodeSibling(c, node);
+                }
+            }
+            if (c != 0 && curTerm.isEmpty()) {
+                throw new RuntimeException(String.format("Unexpected character: %c", c));
+            }
+            if (c == 0) {
+                if (!eofExpected) {
+                    throw new RuntimeException("Unexpected EOF");
+                }
+                if (eofNode == null) {
+                    eofNode = node;
+                } else {
+                    //XXX should be eliminated by grammar verification?
+                    throw new RuntimeException("Ambiguous EOF context");
                 }
             }
         }
     } else {
-        // search from root
-        ParserNode root = new ParserNode(grammar);
-        FindNodeDescending(c, root);
-        root.Release();
+        try (ParserNode root = AllocateNode(grammar, null)) {
+            boolean eofExpected = FindNodeDescending(c, root);
+            if (c == 0 && !eofExpected) {
+                throw new RuntimeException("Empty file not allowed by grammar");
+            }
+        }
     }
     prevTerm.clear();
 }
 
 /** Find candidate node by checking next sibling node from the specified one.
  *
- * @param c Character to match. XXX EOF allowed?
+ * @param c Character to match. Can be zero for EOF indication.
  * @param node Node to start siblings finding.
  * @return True if reached end of grammar.
  */
 private boolean
 FindNodeSibling(int c, ParserNode node)
 {
-    //XXX
-    return false;
+    //XXX totally wrong
+    while (true) {
+        if (node.grammarNode.next != null) {
+            node = AllocateNode(node.grammarNode.next, node.parent);
+            if (!FindNodeDescending(c, node)) {
+                return false;
+            }
+        } else {
+            node = node.parent;
+            if (node == null) {
+                break;
+            }
+            int numMatched = node.numMatched + 1;
+            Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(numMatched);
+            if (qs != Grammar.QuantityStatus.MAX_REACHED) {
+                node = AllocateNode(node.grammarNode, node.parent);
+                node.numMatched = numMatched;
+                if (!FindNodeDescending(c, node) && qs == Grammar.QuantityStatus.NOT_ENOUGH) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
 }
 
 /** Find candidate node by descending on nodes tree. curTerm is populated with matched nodes.
  *
- * @param c Character to match. Cannot be zero (EOF should be checked before this call).XXX
+ * @param c Character to match. Can be zero for EOF indication.
  * @param node Node to start descending from.
  * @return True if next sibling node also should be checked.
  */
@@ -372,7 +405,7 @@ FindNodeDescending(int c, ParserNode node)
         Grammar.SequenceNode sn = (Grammar.SequenceNode)node.grammarNode;
 
         for (int i = 0; i < sn.nodes.length; i++) {
-            try (ParserNode child = AllocateNode(sn.nodes[i])) {
+            try (ParserNode child = AllocateNode(sn.nodes[i], node)) {
                 if (!FindNodeDescending(c, child)) {
                     return node.numMatched >= node.grammarNode.GetMinQuantity();
                 }
@@ -386,7 +419,7 @@ FindNodeDescending(int c, ParserNode node)
         Grammar.VariantsNode vn = (Grammar.VariantsNode)node.grammarNode;
         boolean nextWanted = false;
         for (int i = 0; i < vn.nodes.length; i++) {
-            try (ParserNode child = AllocateNode(vn.nodes[i])) {
+            try (ParserNode child = AllocateNode(vn.nodes[i], node)) {
                 if (FindNodeDescending(c, child)) {
                     nextWanted = true;
                 }

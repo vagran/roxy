@@ -97,7 +97,7 @@ Grammar grammar = new Grammar() {{
 Grammar.Node fileNode = grammar.FindNode("file");
 
 String testFile1 =
-    "someIdent = \"some value \\\\aa\\\"bb\"\n" +
+    "some0Ident = \"some value \\\\aa\\\"bb\"\n" +
     "\n" +
     "   \t;a=1;b=-2;/* Some comment a*b/*/\n" +
     "/* multiline\r\n" +
