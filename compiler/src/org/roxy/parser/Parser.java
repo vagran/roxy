@@ -312,15 +312,7 @@ FindNextNode(int c)
     if (!prevTerm.isEmpty()) {
         ParserNode eofNode = null;
         for (ParserNode node: prevTerm) {
-            Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(node.numMatched);
-            boolean eofExpected = false;
-            if (qs == Grammar.QuantityStatus.MAX_REACHED) {
-                eofExpected = FindNodeSibling(c, node);
-            } else {
-                if (FindNodeDescending(c, node)) {
-                    eofExpected = FindNodeSibling(c, node);
-                }
-            }
+            boolean eofExpected = FindNodeSibling(c, node);
             if (c != 0 && curTerm.isEmpty()) {
                 throw new RuntimeException(String.format("Unexpected character: %c", c));
             }
@@ -356,30 +348,47 @@ FindNextNode(int c)
 private boolean
 FindNodeSibling(int c, ParserNode node)
 {
-    //XXX totally wrong
+    Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(node.numMatched);
+    if (qs != Grammar.QuantityStatus.MAX_REACHED &&
+        ((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
+
+        node.AddRef();
+        node.numMatched++;
+        curTerm.add(node);
+        /* Greedy matching, next term should not be matched if this one matched. */
+        return false;
+    }
+    if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
+        return false;
+    }
+
     while (true) {
         if (node.grammarNode.next != null) {
             node = AllocateNode(node.grammarNode.next, node.parent);
             if (!FindNodeDescending(c, node)) {
                 return false;
             }
-        } else {
-            node = node.parent;
-            if (node == null) {
-                break;
-            }
-            int numMatched = node.numMatched + 1;
-            Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(numMatched);
-            if (qs != Grammar.QuantityStatus.MAX_REACHED) {
-                node = AllocateNode(node.grammarNode, node.parent);
-                node.numMatched = numMatched;
-                if (!FindNodeDescending(c, node) && qs == Grammar.QuantityStatus.NOT_ENOUGH) {
-                    return false;
-                }
+            continue;
+        }
+
+        node = node.parent;
+        if (node == null) {
+            return true;
+        }
+
+        /* Going up so this node is already matched once more. */
+        int numMatched = node.numMatched + 1;
+        qs = node.grammarNode.CheckQuantity(numMatched);
+        if (qs != Grammar.QuantityStatus.MAX_REACHED) {
+            try (ParserNode nextNode = AllocateNode(node.grammarNode, node.parent)) {
+                nextNode.numMatched = numMatched;
+                FindNodeDescending(c, nextNode);
             }
         }
+        if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
+            return false;
+        }
     }
-    return true;
 }
 
 /** Find candidate node by descending on nodes tree. curTerm is populated with matched nodes.
@@ -396,6 +405,7 @@ FindNodeDescending(int c, ParserNode node)
             node.AddRef();
             node.numMatched++;
             curTerm.add(node);
+            /* Greedy matching, next term should not be matched if this one matched. */
             return false;
         }
         return node.numMatched >= node.grammarNode.GetMinQuantity();
