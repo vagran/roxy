@@ -312,12 +312,9 @@ FindNextNode(int c)
         ParserNode eofNode = null;
         for (ParserNode node: prevTerm) {
             boolean eofExpected = FindNodeSibling(c, node);
-            if (c != 0 && curTerm.isEmpty()) {
-                throw new RuntimeException(String.format("Unexpected character: %c", c));
-            }
             if (c == 0) {
                 if (!eofExpected) {
-                    throw new RuntimeException("Unexpected EOF");
+                    continue;
                 }
                 if (eofNode == null) {
                     eofNode = node;
@@ -326,6 +323,12 @@ FindNextNode(int c)
                     throw new RuntimeException("Ambiguous EOF context");
                 }
             }
+        }
+        if (c != 0 && curTerm.isEmpty()) {
+            throw new RuntimeException(String.format("Unexpected character: %c", c));
+        }
+        if (c == 0 && eofNode == null) {
+            throw new RuntimeException("Unexpected EOF");
         }
     } else {
         try (ParserNode root = AllocateNode(grammar, null)) {
@@ -341,36 +344,44 @@ FindNextNode(int c)
 /** Find candidate node by checking next sibling node from the specified one.
  *
  * @param c Character to match. Can be zero for EOF indication.
- * @param node Node to start siblings finding.
- * @return True if reached end of grammar.
+ * @param node Character node to start siblings finding.
+ * @return True if reached end of grammar without match.
  */
+//XXX prev node
 private boolean
 FindNodeSibling(int c, ParserNode node)
 {
-    Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(node.numMatched);
+    Grammar.QuantityStatus qs = node.grammarNode.CheckQuantity(node.numMatched + 1);
     if (qs != Grammar.QuantityStatus.MAX_REACHED &&
         ((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
 
-        node.AddRef();
-        node.numMatched++;
-        curTerm.add(node);
-        /* Greedy matching, next term should not be matched if this one matched. */
-        return false;
+        ParserNode newNode = AllocateNode(node.grammarNode, node.parent);
+        node.numMatched = node.numMatched + 1;
+        curTerm.add(newNode);
     }
     if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
         return false;
     }
 
+    node.AddRef();
     while (true) {
         if (node.grammarNode.next != null) {
-            node = AllocateNode(node.grammarNode.next, node.parent);
+            ParserNode newNode = AllocateNode(node.grammarNode.next, node.parent);
+            node.Release();
+            node = newNode;
             if (!FindNodeDescending(c, node)) {
+                node.Release();
                 return false;
             }
             continue;
         }
 
-        node = node.parent;
+        ParserNode newNode = node.parent;
+        if (newNode != null) {
+            newNode.AddRef();
+        }
+        node.Release();
+        node = newNode;
         if (node == null) {
             return true;
         }
@@ -385,6 +396,7 @@ FindNodeSibling(int c, ParserNode node)
             }
         }
         if (qs == Grammar.QuantityStatus.NOT_ENOUGH) {
+            node.Release();
             return false;
         }
     }
@@ -401,11 +413,10 @@ FindNodeDescending(int c, ParserNode node)
 {
     if (node.grammarNode instanceof Grammar.CharNode) {
         if (((Grammar.CharNode)node.grammarNode).MatchChar(c)) {
+            node.inputPosition = curPos;
+            node.matchedChar = c;
             node.AddRef();
-            node.numMatched++;
             curTerm.add(node);
-            /* Greedy matching, next term should not be matched if this one matched. */
-            return false;
         }
         return node.numMatched >= node.grammarNode.GetMinQuantity();
     }
