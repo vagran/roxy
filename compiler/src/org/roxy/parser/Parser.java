@@ -153,18 +153,17 @@ private class ParserNode implements AutoCloseable {
     /** Assigned AST node if committed and valuable. */
     Ast.Node astNode;
     /** Number the corresponding grammar node has been repeated before this node (number of spent
-     * quantification points so far). For character node this is number of characters matched so
-     * far.
+     * quantification points so far).
      */
     int numMatched;
-    /** Input position for first matched character. */
-    InputPosition startPosition = new InputPosition(),
-    /** Input position after last matched character. */
-                  endPos = null;
+    /** Input position for the matched character. */
+    InputPosition inputPosition = new InputPosition();
     /** Node generation assigned when node created. Current generation incremented with each new
      * input character.
      */
     int generation;
+    /** The matched character code. */
+    int matchedChar;
 
     ParserNode(Grammar.Node grammarNode, ParserNode parent)
     {
