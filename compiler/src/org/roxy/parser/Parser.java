@@ -2,6 +2,7 @@ package org.roxy.parser;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 /** Parses the text into AST using the provided grammar. */
@@ -157,7 +158,7 @@ private class ParserNode implements AutoCloseable {
      */
     int numMatched;
     /** Input position for the matched character. */
-    InputPosition inputPosition = new InputPosition();
+    InputPosition inputPosition;
     /** Node generation assigned when node created. Current generation incremented with each new
      * input character.
      */
@@ -183,6 +184,7 @@ private class ParserNode implements AutoCloseable {
         numMatched = 0;
         refCount = 1;
         generation = curPos.curOffset;
+        inputPosition = null;
     }
 
     void
@@ -244,12 +246,16 @@ private final Reader reader;
 /** Free nodes pool. */
 private ParserNode freeNodes;
 private InputPosition curPos = new InputPosition();
-private Ast ast = new Ast();
+private final Ast ast = new Ast();
 private Summary summary;
 /** Current terminal nodes in different contexts. */
 private ArrayList<ParserNode> curTerm = new ArrayList<>(),
 /** Previous list instance for curTerm. Used to swap with curTerm and save some GC. */
                               prevTerm = new ArrayList<>();
+/** Stores nodes being committed in current round. */
+private final ArrayDeque<ParserNode> committedNodes = new ArrayDeque<>();
+/** Previously created AST leaf node. */
+private Ast.Node lastAstNode;
 
 private ParserNode
 AllocateNode(Grammar.Node grammarNode, ParserNode parent)
@@ -283,7 +289,9 @@ private void
 Finalize()
 {
     FindNextNode(0);
-    //XXX
+    if (lastAstNode != null) {
+        CommitAstNode(lastAstNode, null);
+    }
 }
 
 private void
@@ -337,6 +345,20 @@ FindNextNode(int c)
                 throw new RuntimeException("Empty file not allowed by grammar");
             }
         }
+    }
+    if (prevTerm.size() == 1) {
+        ParserNode node = prevTerm.get(0);
+        if (node.prev != null) {
+            CommitSequence(node.prev);
+            node.prev.Release();
+            node.prev = null;
+        }
+        if (c == 0) {
+            CommitSequence(node);
+        }
+    }
+    for (ParserNode node: prevTerm) {
+        node.Release();
     }
     prevTerm.clear();
 }
@@ -453,6 +475,84 @@ FindNodeDescending(int c, ParserNode node, ParserNode prevCharNode)
     }
 
     throw new IllegalStateException("Invalid node type");
+}
+
+/** Commit nodes which are completely parsed so far.
+ *
+ * @param lastNode Last character node in character nodes sequence linked via "prev" field.
+ */
+private void
+CommitSequence(ParserNode lastNode)
+{
+    while (lastNode != null) {
+        committedNodes.addFirst(lastNode);
+        lastNode = lastNode.prev;
+    }
+    committedNodes.forEach(this::CommitNode);
+    committedNodes.clear();
+}
+
+private void
+CommitNode(ParserNode node)
+{
+    Ast.Node newLeaf = null;
+    int matchedChar = node.matchedChar;
+    InputPosition inputPosition = node.inputPosition;
+    Ast.Node curAstNode = null;
+
+    while (node != null) {
+        if (node.grammarNode.isVal) {
+            boolean isNew = node.astNode == null;
+            if (isNew) {
+                node.astNode = ast.CreateNode();
+                node.astNode.grammarNode = node.grammarNode;
+                node.astNode.startPosition = inputPosition;
+                if (newLeaf == null) {
+                    newLeaf = node.astNode;
+                }
+            }
+            if (node.grammarNode.wantValString) {
+                node.astNode.AppendChar(matchedChar);
+            }
+            if (curAstNode != null) {
+                node.astNode.AppendChild(curAstNode);
+            }
+            if (!isNew) {
+//                curAstNode = null;
+                break;
+            }
+            curAstNode = node.astNode;
+        }
+        node = node.parent;
+    }
+
+    //XXX root is currently assigned in Ast.Node.Commit()
+//    if (curAstNode != null) {
+//        assert ast.root == null;
+//        ast.root = curAstNode;
+//    }
+
+    if (newLeaf != null && newLeaf != lastAstNode) {
+        CommitAstNode(lastAstNode, newLeaf);
+        lastAstNode = newLeaf;
+    }
+}
+
+/** Commit fully parsed AST node.
+ *
+ * @param node Node to commit.
+ * @param nextNode Next AST node. Can be null if EOF.
+ */
+private void
+CommitAstNode(Ast.Node node, Ast.Node nextNode)
+{
+    while (node != null) {
+        if (nextNode != null && nextNode.IsAncestor(node)) {
+            break;
+        }
+        node.Commit(curPos, summary);
+        node = node.parent;
+    }
 }
 
 }

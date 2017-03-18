@@ -105,7 +105,7 @@ String testFile1 =
     "  c =   3;";
 
 TreeMap<String, Object> expectedData = new TreeMap<String, Object>() {{
-    put("someIdent", "some value \\aa\"bb");
+    put("some0Ident", "some value \\aa\"bb");
     put("a", 1);
     put("b", -2);
     put("c", 3);
