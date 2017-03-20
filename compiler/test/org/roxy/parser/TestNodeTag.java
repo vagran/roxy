@@ -9,17 +9,20 @@ public enum Type {
     NUM_LITERAL,
     IDENTIFIER,
     STATEMENT,
+    OPERATOR,
     FILE
 }
 
 public interface ErrorCode {
     int INVALID_ESCAPE = Parser.ErrorCode.CUSTOM_START,
         INVALID_NUMBER = Parser.ErrorCode.CUSTOM_START + 1,
-        DUP_IDENTIFIER = Parser.ErrorCode.CUSTOM_START + 2;
+        DUP_IDENTIFIER = Parser.ErrorCode.CUSTOM_START + 2,
+        UNKNOWN_VARIABLE = Parser.ErrorCode.CUSTOM_START + 3;
 }
 
 final Type type;
 char escapedChar;
+char operator;
 int intValue;
 
 @Override
@@ -35,6 +38,16 @@ GetFabric(Type type)
     return (Ast.Node node, Summary summary) -> {
         TestNodeTag tag = new TestNodeTag(type);
         tag.Compile(node, summary);
+        return tag;
+    };
+}
+
+public static Ast.TagFabric
+GetOpFabric(char operator)
+{
+    return (Ast.Node node, Summary summary) -> {
+        TestNodeTag tag = new TestNodeTag(Type.OPERATOR);
+        tag.operator = operator;
         return tag;
     };
 }

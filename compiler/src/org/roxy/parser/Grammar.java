@@ -85,6 +85,7 @@ public abstract class Node implements Iterable<Node> {
     /** Specify node precedence. It is accounted in recursively defined grammar.
      *
      * @param precedenceGroup Object which identifies the group this precedence is defined in.
+     *                        Equality checked by reference equality.
      * @param precedence Precedence value. Higher values mean higher precedence.
      * @return This node.
      */

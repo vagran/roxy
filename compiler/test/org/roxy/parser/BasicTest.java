@@ -6,6 +6,9 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.TreeMap;
 
+import static org.junit.Assert.assertEquals;
+import static org.roxy.parser.ParserUtil.VerifyResult;
+
 public class BasicTest {
 
 Map<String, Object>
@@ -111,29 +114,13 @@ TreeMap<String, Object> expectedData = new TreeMap<String, Object>() {{
     put("c", 3);
 }};
 
-void
-VerifyResult(Map<String, Object> result, Map<String, Object> expected)
-{
-    if (result.size() != expected.size()) {
-        throw new RuntimeException(String.format("Unexpected result size: %d, expected %d",
-                                                 result.size(), expected.size()));
-    }
-    for (String key: expected.keySet()) {
-        if (!result.containsKey(key)) {
-            throw new RuntimeException("Expected value not found: " + key);
-        }
-        if (!expected.get(key).equals(result.get(key))) {
-            throw new RuntimeException(String.format("Unexpected value: [%s] = %s, expected %s",
-                                                     key, result.get(key), expected.get(key)));
-        }
-    }
-}
-
 @Test public void
 Basic()
 {
     Parser parser = ParserUtil.TestParser(fileNode, testFile1);
     Map<String, Object> result = Compile(parser.GetResult(), parser.GetSummary());
+    assertEquals(0, parser.GetSummary().GetErrorsCount());
+    assertEquals(0, parser.GetSummary().GetWarningsCount());
     VerifyResult(result, expectedData);
 }
 

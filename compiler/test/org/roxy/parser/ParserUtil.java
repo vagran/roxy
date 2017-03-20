@@ -1,15 +1,15 @@
 package org.roxy.parser;
 
 import java.util.HashSet;
+import java.util.Map;
 
 import static utils.Utils.AssertThrows;
 
 public class ParserUtil {
 
-public static class Record {
-    public final int code, line, col;
+static class Record {
+    final int code, line, col;
 
-    public
     Record(int code, int line, int col)
     {
         this.code = code;
@@ -17,7 +17,7 @@ public static class Record {
         this.col = col;
     }
 
-    public boolean
+    boolean
     Match(Summary.Record rec)
     {
         if (rec.inputPosition == null && line != -1) {
@@ -35,13 +35,11 @@ public static class Record {
 }
 
 public static class Error extends Record {
-    public
     Error(int code, int line, int col)
     {
         super(code, line, col);
     }
 
-    public
     Error(int code)
     {
         super(code, -1, -1);
@@ -74,7 +72,7 @@ public static class Warning extends Record {
     }
 }
 
-public static void
+private static void
 VerifySummary(Summary summary, Record... expectedRecords)
 {
     HashSet<Summary.Record> matchedRecords = new HashSet<>();
@@ -95,7 +93,7 @@ VerifySummary(Summary summary, Record... expectedRecords)
     }
 }
 
-public static Parser
+private static Parser
 TestParser(Grammar.Node grammar, String file, Class<? extends Throwable> expectedConstructException,
            Class<? extends Throwable> expectedParseException, Record... expectedRecords)
 {
@@ -119,13 +117,13 @@ TestParser(Grammar.Node grammar, String file, Class<? extends Throwable> expecte
     return parser;
 }
 
-public static Parser
+static Parser
 TestParser(Grammar.Node grammar, String file, Class<? extends Throwable> expectedConstructException)
 {
     return TestParser(grammar, file, expectedConstructException, null);
 }
 
-public static Parser
+static Parser
 TestParser(Grammar.Node grammar, String file, Record... expectedRecords)
 {
     return TestParser(grammar, file, null, null, expectedRecords);
@@ -140,6 +138,24 @@ FindRecord(Record rec, Summary summary)
         }
     }
     return null;
+}
+
+static void
+VerifyResult(Map<String, ?> result, Map<String, ?> expected)
+{
+    if (result.size() != expected.size()) {
+        throw new RuntimeException(String.format("Unexpected result size: %d, expected %d",
+                                                 result.size(), expected.size()));
+    }
+    for (String key: expected.keySet()) {
+        if (!result.containsKey(key)) {
+            throw new RuntimeException("Expected value not found: " + key);
+        }
+        if (!expected.get(key).equals(result.get(key))) {
+            throw new RuntimeException(String.format("Unexpected value: [%s] = %s, expected %s",
+                                                     key, result.get(key), expected.get(key)));
+        }
+    }
 }
 
 }

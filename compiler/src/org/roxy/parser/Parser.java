@@ -30,7 +30,7 @@ public interface InfoCode {
 
 /** Current position in input text. */
 public static class InputPosition {
-    public int curOffset = 0, curLine = 1, curCol = 0;
+    public int curOffset = 0, curLine = 1, curCol = 1;
 
     public
     InputPosition()
@@ -58,7 +58,7 @@ public static class InputPosition {
         curOffset++;
         if (c == '\n' || wasCr) {
             curLine++;
-            curCol = 0;
+            curCol = 1;
         } else if (c != '\r') {
             curCol++;
         }
@@ -84,7 +84,6 @@ Parser(Grammar.Node grammar, Reader reader)
     }
     this.grammar = grammar;
     this.reader = reader;
-    InitializeState();
 }
 
 public
@@ -219,6 +218,23 @@ private class ParserNode implements AutoCloseable {
         }
     }
 
+    String
+    GetHierarchyStr()
+    {
+        StringBuilder sb = new StringBuilder();
+        ParserNode node = this;
+        while (node != null) {
+            if (node.grammarNode.name != null) {
+                if (sb.length() != 0) {
+                    sb.append(" <= ");
+                }
+                sb.append(node.grammarNode.name);
+            }
+            node = node.parent;
+        }
+        return sb.toString();
+    }
+
     @Override public
     void close()
     {
@@ -277,13 +293,6 @@ FreeNode(ParserNode node)
     freeNodes = node;
 }
 
-/** Prepare parser for the first character processing. */
-private void
-InitializeState()
-{
-    //XXX
-}
-
 /** Called when input text is fully processed. */
 private void
 Finalize()
@@ -297,11 +306,7 @@ Finalize()
 private void
 ProcessChar(int c)
 {
-    //XXX
-
-
     FindNextNode(c);
-
     curPos = new InputPosition(curPos).FeedChar(c);
 }
 
@@ -332,6 +337,12 @@ FindNextNode(int c)
                 }
             }
         }
+
+        System.out.println("Char: " + (char)c);
+        for (ParserNode node: curTerm) {
+            System.out.println(node.GetHierarchyStr());
+        }
+
         if (c != 0 && curTerm.isEmpty()) {
             throw new RuntimeException(String.format("Unexpected character: %c", c));
         }
@@ -447,6 +458,10 @@ FindNodeDescending(int c, ParserNode node, ParserNode prevCharNode)
         return node.numMatched >= node.grammarNode.GetMinQuantity();
     }
 
+    if (!CheckRecursion(node)) {
+        return node.numMatched >= node.grammarNode.GetMinQuantity();
+    }
+
     if (node.grammarNode instanceof Grammar.SequenceNode) {
         Grammar.SequenceNode sn = (Grammar.SequenceNode)node.grammarNode;
 
@@ -475,6 +490,32 @@ FindNodeDescending(int c, ParserNode node, ParserNode prevCharNode)
     }
 
     throw new IllegalStateException("Invalid node type");
+}
+
+/**
+ * Check if the provided node is allowed to be instantiated based on recursion constraints.
+ * @param node Node to check.
+ * @return True if allowed, false if not.
+ */
+private boolean
+CheckRecursion(ParserNode node)
+{
+    if (node.grammarNode.precedenceGroup == null) {
+        return true;
+    }
+    ParserNode parent = node.parent;
+    while (parent != null) {
+        if (parent.generation != node.generation) {
+            break;
+        }
+        if (parent.grammarNode.precedenceGroup == node.grammarNode.precedenceGroup) {
+            //noinspection unchecked
+            return ((Comparable<Object>)node.grammarNode.precedence)
+                .compareTo(parent.grammarNode.precedence) > 0;
+        }
+        parent = parent.parent;
+    }
+    return true;
 }
 
 /** Commit nodes which are completely parsed so far.
