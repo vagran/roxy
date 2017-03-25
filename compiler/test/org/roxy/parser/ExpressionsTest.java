@@ -61,7 +61,8 @@ Grammar grammar = new Grammar() {{
             .Name("div")
             .Precedence(PrecedenceGroup.EXPRESSION, Precedence.MULTIPLY)
             .Val(TestNodeTag.GetOpFabric('/')),
-        Sequence(Char('('), NodeRef("gap").NoneToOne(), NodeRef("expression"),
+        Sequence(Char('('), NodeRef("gap").NoneToOne(),
+                 NodeRef("expression").PrecedenceRoot(PrecedenceGroup.EXPRESSION),
                  NodeRef("gap").NoneToOne(), Char(')'))
     );
 
@@ -70,7 +71,7 @@ Grammar grammar = new Grammar() {{
         NodeRef("gap").NoneToOne(),
         Char('='),
         NodeRef("gap").NoneToOne(),
-        NodeRef("expression"),
+        NodeRef("expression").PrecedenceRoot(PrecedenceGroup.EXPRESSION),
         NodeRef("gap").NoneToOne(),
         Char(';')).Val(TestNodeTag.GetFabric(TestNodeTag.Type.STATEMENT));
 
@@ -106,15 +107,20 @@ Basic()
 //        "a = 1;\n" +
 //        "b = 1 + 2;" +
 //        "c = a + b * 2;\n" +
-//        "d = a * 2 + b;");
-        "a = 2 * 3 + 4;");
+//        "d = a * 2 + b;" +
+//        "e = 2 * 3 + 4;" +
+//        "f = 2 * 3 * 4 * 5 + 1");
+        "g = 1 + 2 + 3");
     Map<String, Integer> result = Compile(parser.GetResult(), parser.GetSummary());
     TreeMap<String, Integer> expectedData = new TreeMap<String, Integer>() {{
-        put("a", 10);
+//        put("a", 10);
 //        put("a", 1);
 //        put("b", 3);
 //        put("c", 7);
 //        put("d", 5);
+//        put("e", 10);
+//        put("f", 121);
+        put("g", 6);
     }};
     VerifyResult(result, expectedData);
 }

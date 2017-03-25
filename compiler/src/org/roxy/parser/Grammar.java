@@ -97,6 +97,20 @@ public abstract class Node implements Iterable<Node> {
         return this;
     }
 
+    /** Mark node as root for expression with the specified precedence group.
+     *
+     * @param precedenceGroup Object which identifies the group this precedence is defined in.
+     *                        Equality checked by reference equality.
+     * @return
+     */
+    public final Node
+    PrecedenceRoot(Object precedenceGroup)
+    {
+        this.precedenceGroup = precedenceGroup;
+        this.precedence = null;
+        return this;
+    }
+
     /** Mark the node valuable to have it in the parsed AST.
      *
      * @param valTagFabric Fabric for AST node tag creation.

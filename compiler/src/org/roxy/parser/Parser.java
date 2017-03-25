@@ -158,10 +158,6 @@ private class ParserNode implements AutoCloseable {
     int numMatched;
     /** Input position for the matched character. */
     InputPosition inputPosition;
-    /** Node generation assigned when node created. Current generation incremented with each new
-     * input character.
-     */
-    int generation;
     /** The matched character code. */
     int matchedChar;
 
@@ -182,7 +178,6 @@ private class ParserNode implements AutoCloseable {
         astNode = null;
         numMatched = 0;
         refCount = 1;
-        generation = curPos.curOffset;
         inputPosition = null;
     }
 
@@ -500,15 +495,15 @@ FindNodeDescending(int c, ParserNode node, ParserNode prevCharNode)
 private boolean
 CheckRecursion(ParserNode node)
 {
-    if (node.grammarNode.precedenceGroup == null) {
+    if (node.grammarNode.precedenceGroup == null || node.grammarNode.precedence == null) {
         return true;
     }
     ParserNode parent = node.parent;
     while (parent != null) {
-        if (parent.generation != node.generation) {
-            break;
-        }
         if (parent.grammarNode.precedenceGroup == node.grammarNode.precedenceGroup) {
+            if (parent.grammarNode.precedence == null) {
+                break;
+            }
             //noinspection unchecked
             return ((Comparable<Object>)node.grammarNode.precedence)
                 .compareTo(parent.grammarNode.precedence) > 0;
