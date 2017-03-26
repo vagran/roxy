@@ -119,20 +119,19 @@ Basic()
 {
     Parser parser = ParserUtil.TestParser(
         fileNode,
-        //"a = (1);\n" +
-        //"b = 1 + 2;" +
-        "bb = 1 + (2 - 3) - 4;");
-//        "c = a + b * 2;\n" +
-//        "d = a * 2 + b;" +
-//        "e = 2 * 3 + 4;" +
-//        "f = 2 * 3 * 4 * 5 + 1;" +
-//        "g = 1 + 2 + 3;\n" +
-//        "h = 1 + 2 - 3 - 4 - 5 + 6 + 7;" +
-//        "i = 1 + 2 * 3 * 24 / 6 - 7;" +
-        //"j = 1 + (2 * 3 * 4) / 6 - 7;");
+        "a = 1;\n" +
+        "b = 1 + 2;" +
+        "c = a + b * 2;\n" +
+        "d = a * 2 + b;" +
+        "e = 2 * 3 + 4;" +
+        "f = 2 * 3 * 4 * 5 + 1;" +
+        "g = 1 + 2 + 3;\n" +
+        "h = 1 + 2 - 3 - 4 - 5 + 6 + 7;" +
+        "i = 1 + 2 * 3 * 24 / 6 - 7;" +
+        "j = 1 + (2 * 3 * 4) / 6 - 7;\n" +
+        "k = 1 * 2 * 3 - 5 - 6 + 7 + 8 + 10 / 5 / 2;");
     Map<String, Integer> result = Compile(parser.GetResult(), parser.GetSummary());
     TreeMap<String, Integer> expectedData = new TreeMap<String, Integer>() {{
-        put("a", 10);
         put("a", 1);
         put("b", 3);
         put("c", 7);
@@ -141,7 +140,9 @@ Basic()
         put("f", 121);
         put("g", 6);
         put("h", 4);
-        put("i", -1);
+        put("i", 18);
+        put("j", -2);
+        put("k", 11);
     }};
     VerifyResult(result, expectedData);
 }

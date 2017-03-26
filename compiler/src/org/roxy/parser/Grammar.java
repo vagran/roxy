@@ -107,7 +107,6 @@ public abstract class Node implements Iterable<Node> {
     PrecedenceRoot(Object precedenceGroup)
     {
         this.precedenceGroup = precedenceGroup;
-        this.precedence = null;
         return this;
     }
 
@@ -214,6 +213,8 @@ public abstract class Node implements Iterable<Node> {
         node.quantityValid = quantityValid;
         node.numMin = numMin;
         node.numMax = numMax;
+        node.precedenceGroup = precedenceGroup;
+        node.precedence = precedence;
         return node;
     }
 

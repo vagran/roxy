@@ -333,11 +333,6 @@ FindNextNode(int c)
             }
         }
 
-        System.out.println("Char: " + (char)c);
-        for (ParserNode node: curTerm) {
-            System.out.println(node.GetHierarchyStr());
-        }
-
         if (c != 0 && curTerm.isEmpty()) {
             throw new RuntimeException(String.format("Unexpected character: %c", c));
         }
