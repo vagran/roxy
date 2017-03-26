@@ -16,7 +16,9 @@ enum PrecedenceGroup {
 
 enum Precedence {
     ADD,
-    MULTIPLY
+    SUB,
+    MUL,
+    DIV
 }
 
 Grammar grammar = new Grammar() {{
@@ -41,29 +43,42 @@ Grammar grammar = new Grammar() {{
     Node("expression").Any(
         NodeRef("identifier"),
         NodeRef("number-literal"),
+
         Sequence(NodeRef("expression"), NodeRef("gap").NoneToOne(), Char('+'),
-                 NodeRef("gap").NoneToOne(), NodeRef("expression"))
+                 NodeRef("gap").NoneToOne(), NodeRef("expression"),
+                 Sequence(NodeRef("gap").NoneToOne(), Char('+'),
+                          NodeRef("gap").NoneToOne(), NodeRef("expression")).NoneToMany())
             .Name("add")
             .Precedence(PrecedenceGroup.EXPRESSION, Precedence.ADD)
             .Val(TestNodeTag.GetOpFabric('+')),
+
         Sequence(NodeRef("expression"), NodeRef("gap").NoneToOne(), Char('-'),
-                 NodeRef("gap").NoneToOne(), NodeRef("expression"))
+                 NodeRef("gap").NoneToOne(), NodeRef("expression"),
+                 Sequence(NodeRef("gap").NoneToOne(), Char('-'),
+                          NodeRef("gap").NoneToOne(), NodeRef("expression")).NoneToMany())
             .Name("sub")
-            .Precedence(PrecedenceGroup.EXPRESSION, Precedence.ADD)
+            .Precedence(PrecedenceGroup.EXPRESSION, Precedence.SUB)
             .Val(TestNodeTag.GetOpFabric('-')),
+
         Sequence(NodeRef("expression"), NodeRef("gap").NoneToOne(), Char('*'),
-                 NodeRef("gap").NoneToOne(), NodeRef("expression"))
+                 NodeRef("gap").NoneToOne(), NodeRef("expression"),
+                 Sequence(NodeRef("gap").NoneToOne(), Char('*'),
+                          NodeRef("gap").NoneToOne(), NodeRef("expression")).NoneToMany())
             .Name("mul")
-            .Precedence(PrecedenceGroup.EXPRESSION, Precedence.MULTIPLY)
+            .Precedence(PrecedenceGroup.EXPRESSION, Precedence.MUL)
             .Val(TestNodeTag.GetOpFabric('*')),
+
         Sequence(NodeRef("expression"), NodeRef("gap").NoneToOne(), Char('/'),
-                 NodeRef("gap").NoneToOne(), NodeRef("expression"))
+                 NodeRef("gap").NoneToOne(), NodeRef("expression"),
+                Sequence(NodeRef("gap").NoneToOne(), Char('/'),
+                         NodeRef("gap").NoneToOne(), NodeRef("expression")).NoneToMany())
             .Name("div")
-            .Precedence(PrecedenceGroup.EXPRESSION, Precedence.MULTIPLY)
+            .Precedence(PrecedenceGroup.EXPRESSION, Precedence.DIV)
             .Val(TestNodeTag.GetOpFabric('/')),
+
         Sequence(Char('('), NodeRef("gap").NoneToOne(),
                  NodeRef("expression").PrecedenceRoot(PrecedenceGroup.EXPRESSION),
-                 NodeRef("gap").NoneToOne(), Char(')'))
+                 NodeRef("gap").NoneToOne(), Char(')')).Name("braces")
     );
 
     Node("statement").Sequence(
@@ -104,23 +119,29 @@ Basic()
 {
     Parser parser = ParserUtil.TestParser(
         fileNode,
-//        "a = 1;\n" +
-//        "b = 1 + 2;" +
+        //"a = (1);\n" +
+        //"b = 1 + 2;" +
+        "bb = 1 + (2 - 3) - 4;");
 //        "c = a + b * 2;\n" +
 //        "d = a * 2 + b;" +
 //        "e = 2 * 3 + 4;" +
-//        "f = 2 * 3 * 4 * 5 + 1");
-        "g = 1 + 2 + 3");
+//        "f = 2 * 3 * 4 * 5 + 1;" +
+//        "g = 1 + 2 + 3;\n" +
+//        "h = 1 + 2 - 3 - 4 - 5 + 6 + 7;" +
+//        "i = 1 + 2 * 3 * 24 / 6 - 7;" +
+        //"j = 1 + (2 * 3 * 4) / 6 - 7;");
     Map<String, Integer> result = Compile(parser.GetResult(), parser.GetSummary());
     TreeMap<String, Integer> expectedData = new TreeMap<String, Integer>() {{
-//        put("a", 10);
-//        put("a", 1);
-//        put("b", 3);
-//        put("c", 7);
-//        put("d", 5);
-//        put("e", 10);
-//        put("f", 121);
+        put("a", 10);
+        put("a", 1);
+        put("b", 3);
+        put("c", 7);
+        put("d", 5);
+        put("e", 10);
+        put("f", 121);
         put("g", 6);
+        put("h", 4);
+        put("i", -1);
     }};
     VerifyResult(result, expectedData);
 }
@@ -158,18 +179,34 @@ EvaluateNode(Ast.Node node, Map<String, Integer> symbols, Summary summary)
         return symbols.get(node.str);
     } else if (valueTag.type ==  TestNodeTag.Type.OPERATOR) {
         switch (valueTag.operator) {
-        case '+':
-            return EvaluateNode(node.children.get(0), symbols, summary) +
-                EvaluateNode(node.children.get(1), symbols, summary);
-        case '-':
-            return EvaluateNode(node.children.get(0), symbols, summary) -
-                EvaluateNode(node.children.get(1), symbols, summary);
-        case '*':
-            return EvaluateNode(node.children.get(0), symbols, summary) *
-                EvaluateNode(node.children.get(1), symbols, summary);
-        case '/':
-            return EvaluateNode(node.children.get(0), symbols, summary) /
-                EvaluateNode(node.children.get(1), symbols, summary);
+        case '+': {
+            int sum = 0;
+            for (Ast.Node child: node.children) {
+                sum += EvaluateNode(child, symbols, summary);
+            }
+            return sum;
+        }
+        case '-': {
+            int sum = EvaluateNode(node.children.get(0), symbols, summary);
+            for (int i = 1; i < node.children.size(); i++) {
+                sum -= EvaluateNode(node.children.get(i), symbols, summary);
+            }
+            return sum;
+        }
+        case '*': {
+            int prod = 1;
+            for (Ast.Node child: node.children) {
+                prod *= EvaluateNode(child, symbols, summary);
+            }
+            return prod;
+        }
+        case '/': {
+            int prod = EvaluateNode(node.children.get(0), symbols, summary);
+            for (int i = 1; i < node.children.size(); i++) {
+                prod /= EvaluateNode(node.children.get(i), symbols, summary);
+            }
+            return prod;
+        }
         default:
             throw new IllegalStateException("Unhandled operator: " + valueTag.operator);
         }

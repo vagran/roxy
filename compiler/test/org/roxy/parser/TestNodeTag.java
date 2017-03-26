@@ -29,7 +29,14 @@ int intValue;
 public String
 toString()
 {
-    return type.toString();
+    switch (type) {
+    case NUM_LITERAL:
+        return String.format("%s(%d)", type, intValue);
+    case OPERATOR:
+        return String.format("%s(%c)", type, operator);
+    default:
+        return type.toString();
+    }
 }
 
 public static Ast.TagFabric
